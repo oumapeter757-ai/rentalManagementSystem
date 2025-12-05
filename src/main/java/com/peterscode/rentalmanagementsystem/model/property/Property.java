@@ -1,5 +1,6 @@
 package com.peterscode.rentalmanagementsystem.model.property;
 
+import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -81,6 +82,11 @@ public class Property {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+
+    @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RentalApplication> applications;
+
 
 
     public void addImage(PropertyImage image) {

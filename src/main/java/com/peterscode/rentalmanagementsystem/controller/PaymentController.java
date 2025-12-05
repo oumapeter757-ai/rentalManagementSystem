@@ -1,0 +1,238 @@
+package com.peterscode.rentalmanagementsystem.controller;
+
+import com.peterscode.rentalmanagementsystem.dto.request.MpesaStkRequest;
+import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
+import com.peterscode.rentalmanagementsystem.dto.response.ApiResponse;
+import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
+import com.peterscode.rentalmanagementsystem.dto.response.PaymentResponse;
+import com.peterscode.rentalmanagementsystem.service.PaymentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/payments")
+@RequiredArgsConstructor
+@SecurityRequirement(name = "bearerAuth")
+@Slf4j
+
+public class PaymentController {
+
+    private final PaymentService paymentService;
+
+
+    @PostMapping
+    @PreAuthorize("hasAnyRole('TENANT', 'ADMIN')")
+    @Operation(summary = "Create a new payment")
+    public ResponseEntity<ApiResponse<PaymentResponse>> createPayment(
+            Authentication authentication,
+            @Valid @RequestBody PaymentRequest request) {
+
+        String callerEmail = authentication.getName();
+        PaymentResponse response = paymentService.createPayment(request, callerEmail);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment created successfully", response)
+        );
+    }
+
+    @PostMapping("/mpesa/stk-push")
+    @PreAuthorize("hasAnyRole('TENANT', 'ADMIN')")
+    @Operation(summary = "Initiate M-Pesa STK Push payment")
+    public ResponseEntity<ApiResponse<MpesaStkResponse>> initiateMpesaPayment(
+            Authentication authentication,
+            @Valid @RequestBody MpesaStkRequest request) {
+
+        String callerEmail = authentication.getName();
+        MpesaStkResponse response = paymentService.initiateMpesaPayment(request, callerEmail);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("M-Pesa payment initiated", response)
+        );
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasAnyRole('TENANT', 'LANDLORD', 'ADMIN')")
+    @Operation(summary = "Get my payments")
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getMyPayments(
+            Authentication authentication) {
+
+        String callerEmail = authentication.getName();
+        List<PaymentResponse> payments = paymentService.getMyPayments(callerEmail);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("My payments fetched successfully", payments)
+        );
+    }
+
+    @GetMapping("/tenant/{tenantId}")
+    @PreAuthorize("hasAnyRole('LANDLORD', 'ADMIN')")
+    @Operation(summary = "Get payments by tenant ID")
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getPaymentsByTenant(
+            @PathVariable Long tenantId) {
+
+        List<PaymentResponse> payments = paymentService.getPaymentsByTenant(tenantId);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Tenant payments fetched successfully", payments)
+        );
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get payment by ID")
+    public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentById(
+            @PathVariable Long id) {
+
+        PaymentResponse payment = paymentService.getPaymentById(id);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment fetched successfully", payment)
+        );
+    }
+
+    @GetMapping("/status/{status}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get payments by status")
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getPaymentsByStatus(
+            @PathVariable String status) {
+
+        List<PaymentResponse> payments = paymentService.getPaymentsByStatus(status);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payments fetched by status", payments)
+        );
+    }
+
+    @GetMapping("/method/{method}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get payments by payment method")
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getPaymentsByMethod(
+            @PathVariable String method) {
+
+        List<PaymentResponse> payments = paymentService.getPaymentsByMethod(method);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payments fetched by method", payments)
+        );
+    }
+
+    @GetMapping("/mpesa/pending")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get pending M-Pesa callbacks")
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getPendingMpesaCallbacks() {
+
+        List<PaymentResponse> payments = paymentService.getPendingMpesaCallbacks();
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Pending M-Pesa callbacks", payments)
+        );
+    }
+
+    @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Update payment status")
+    public ResponseEntity<ApiResponse<PaymentResponse>> updatePaymentStatus(
+            @PathVariable Long id,
+            @RequestParam String status,
+            @RequestParam(required = false) String notes) {
+
+        PaymentResponse payment = paymentService.updatePaymentStatus(id, status, notes);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment status updated", payment)
+        );
+    }
+
+    @PutMapping("/{id}/mark-paid")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Manually mark payment as paid")
+    public ResponseEntity<ApiResponse<PaymentResponse>> markAsPaid(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam(required = false) String transactionCode) {
+
+        String callerEmail = authentication.getName();
+        PaymentResponse payment = paymentService.markAsPaid(id, transactionCode, callerEmail);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment marked as paid", payment)
+        );
+    }
+
+    @GetMapping("/summary")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Get payment summary")
+    public ResponseEntity<ApiResponse<Object>> getPaymentSummary() {
+
+        Object summary = paymentService.getPaymentSummary();
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment summary fetched", summary)
+        );
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Delete payment")
+    public ResponseEntity<ApiResponse<Void>> deletePayment(
+            Authentication authentication,
+            @PathVariable Long id) {
+
+        String callerEmail = authentication.getName();
+        paymentService.deletePayment(id, callerEmail);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment deleted successfully", null)
+        );
+    }
+}
+
+
+@RestController
+@RequestMapping("/api/payments/mpesa")
+class MpesaCallbackController {
+    private static final Logger log = LoggerFactory.getLogger(MpesaCallbackController.class);
+
+    private final PaymentService paymentService;
+
+    public MpesaCallbackController(PaymentService paymentService) {
+        this.paymentService = paymentService;
+    }
+
+    @PostMapping("/callback")
+    @Operation(summary = "M-Pesa callback endpoint")
+    public ResponseEntity<String> handleCallback(@RequestBody String callbackData) {
+        try {
+            paymentService.processMpesaCallback(callbackData);
+            return ResponseEntity.ok("Callback processed successfully");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error processing callback");
+        }
+    }
+
+    @PostMapping("/validation")
+    @Operation(summary = "M-Pesa validation endpoint")
+    public ResponseEntity<String> handleValidation(@RequestBody String validationData) {
+        log.info("Received M-Pesa validation request: {}", validationData);
+        return ResponseEntity.ok("Accepted");
+    }
+
+    @PostMapping("/confirmation")
+    @Operation(summary = "M-Pesa confirmation endpoint")
+    public ResponseEntity<String> handleConfirmation(@RequestBody String confirmationData) {
+        log.info("Received M-Pesa confirmation request: {}", confirmationData);
+        paymentService.processMpesaCallback(confirmationData);
+        return ResponseEntity.ok("Confirmation received");
+    }
+}

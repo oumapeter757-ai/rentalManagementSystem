@@ -45,7 +45,7 @@ mpesa:
   shortcode: "174379"
   stk-push-url: "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
   auth-url: "https://sandbox.safaricom.co.ke/oauth/v1/generate"
-  callback-url: "http://localhost:8080/api/payments/mpesa/callback"
+  callback-url: "https://halfhearted-shavonda-unedificial.ngrok-free.dev/api/payments/mpesa/callback"
   environment: "sandbox"
 
 server:

@@ -63,23 +63,64 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/properties/*/images").hasAnyRole("LANDLORD", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/properties/*/images/*").hasAnyRole("LANDLORD", "ADMIN")
 
-                        // Property management endpoints
+                        // Property CRUD operations
                         .requestMatchers(HttpMethod.POST, "/api/properties").hasAnyRole("LANDLORD", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/properties/*").hasAnyRole("LANDLORD", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/properties/*").hasAnyRole("LANDLORD", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/properties").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/properties/*").permitAll()
 
-                        // Upload endpoints
+                        .requestMatchers("/api/payments/mpesa/callback").permitAll()
+
+                        .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/me").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*").hasRole("ADMIN")
+
+
+                        .requestMatchers(HttpMethod.POST, "/api/leases").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/property/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/property/*/active").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/*").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/leases/*/terminate").hasAnyRole("LANDLORD", "ADMIN", "TENANT")
+
+                        // Rental Application endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/applications").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/my-applications").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/my-properties").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/property/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/status/*").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/status").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/count/status/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/pending").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/*").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/applications/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("TENANT", "ADMIN")
+
+                        // M-Pesa STK Push (Tenant & Admin)
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/stk-push").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/callback").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/validation").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/confirmation").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/tenant/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/status/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payments/*/status").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payments/*/mark-paid").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/summary").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/mpesa/pending").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/method/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/payments/*").authenticated()
+
+
                         .requestMatchers("/uploads/**").permitAll()
 
-                        // Admin-only endpoints
+                        // Role-specific endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-
-                        // Landlord-only endpoints
                         .requestMatchers("/api/landlord/**").hasAnyRole("LANDLORD", "ADMIN")
-
-                        // Tenant endpoints
                         .requestMatchers("/api/tenant/**").hasAnyRole("TENANT", "ADMIN")
 
                         // Everything else requires authentication
