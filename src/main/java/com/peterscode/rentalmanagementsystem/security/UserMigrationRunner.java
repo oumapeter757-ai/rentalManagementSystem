@@ -1,12 +1,17 @@
 package com.peterscode.rentalmanagementsystem.security;
 
+import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class UserMigrationRunner implements CommandLineRunner {
@@ -17,38 +22,74 @@ public class UserMigrationRunner implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        userRepository.findAll().forEach(user -> {
-            boolean changed = false;
-
-            // Normalize email and username
-            String email = user.getEmail();
-            String username = user.getUsername();
-            if (!email.equals(email.toLowerCase().trim())) {
-                user.setEmail(email.toLowerCase().trim());
-                changed = true;
-            }
-            if (!username.equals(username.toLowerCase().trim())) {
-                user.setUsername(username.toLowerCase().trim());
-                changed = true;
+        try {
+            long userCount = userRepository.count();
+            if (userCount == 0) {
+                log.info("No users found in database. Migration skipped.");
+                return;
             }
 
-            // Re-encode password if not already BCrypt (detect via $2a$ prefix)
-            if (!user.getPassword().startsWith("$2a$")) {
-                user.setPassword(passwordEncoder.encode(user.getPassword()));
-                changed = true;
-            }
+            log.info("Starting user migration for {} users...", userCount);
 
-            // Ensure enabled is true (optional)
-            if (!user.isEnabled()) {
-                user.setEnabled(true);
-                changed = true;
-            }
+            // Use AtomicInteger for mutable counter in lambda
+            AtomicInteger updatedCount = new AtomicInteger(0);
 
-            if (changed) {
-                userRepository.save(user);
-                System.out.println("Updated user: " + user.getEmail());
-            }
-        });
-        System.out.println("User migration completed.");
+            userRepository.findAll().forEach(user -> {
+                boolean changed = processUser(user);
+
+                if (changed) {
+                    userRepository.save(user);
+                    updatedCount.incrementAndGet();
+                    log.info("Updated user: {}", user.getEmail());
+                }
+            });
+
+            log.info("User migration completed. Updated {} out of {} users.",
+                    updatedCount.get(), userCount);
+
+        } catch (Exception e) {
+            log.error("Error during user migration: {}", e.getMessage(), e);
+        }
+    }
+
+    private boolean processUser(User user) {
+        boolean changed = false;
+
+        // Normalize email and username
+        String email = user.getEmail();
+        String username = user.getUsername();
+
+        // Normalize email
+        if (email != null && !email.equals(email.toLowerCase().trim())) {
+            String normalizedEmail = email.toLowerCase().trim();
+            log.debug("Normalizing email: {} -> {}", email, normalizedEmail);
+            user.setEmail(normalizedEmail);
+            changed = true;
+        }
+
+        // Normalize username
+        if (username != null && !username.equals(username.toLowerCase().trim())) {
+            String normalizedUsername = username.toLowerCase().trim();
+            log.debug("Normalizing username: {} -> {}", username, normalizedUsername);
+            user.setUsername(normalizedUsername);
+            changed = true;
+        }
+
+        // Re-encode password if not already BCrypt (detect via $2a$ or $2b$ prefix)
+        String password = user.getPassword();
+        if (password != null && !password.startsWith("$2a$") && !password.startsWith("$2b$")) {
+            log.debug("Re-encoding password for user: {}", user.getEmail());
+            user.setPassword(passwordEncoder.encode(password));
+            changed = true;
+        }
+
+        // Ensure enabled is true (optional - you may want to keep as is)
+        if (!user.isEnabled()) {
+            log.debug("Enabling user: {}", user.getEmail());
+            user.setEnabled(true);
+            changed = true;
+        }
+
+        return changed;
     }
 }

@@ -1,5 +1,6 @@
 package com.peterscode.rentalmanagementsystem.model.logs;
 
+import com.peterscode.rentalmanagementsystem.model.logs.EmailStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -9,7 +10,8 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "email_logs")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -19,24 +21,52 @@ public class EmailLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
-    private String recipientEmail;
+    @Column(name = "recipient", nullable = false)
+    private String recipient;
 
-    @Column(nullable = false, length = 200)
+    @Column(name = "subject", nullable = false)
     private String subject;
 
-    @Column(length = 1000)
+    @Column(name = "body", columnDefinition = "TEXT")
     private String body;
 
-    @Column(nullable = false)
-    private boolean sent;
+    @Column(name = "template_name")
+    private String templateName;
 
-    @Column(length = 500)
-    private String errorMessage; // stores error if sending fails
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private EmailStatus status;
+
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount = 0;
+
+    @Column(name = "sent_at")
+    private LocalDateTime sentAt;
+
+    @Column(name = "last_attempt_at", nullable = false)  // Make sure this matches your table
+    private LocalDateTime lastAttemptAt;
+
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    private String errorMessage;
 
     @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.lastAttemptAt == null) {
+            this.lastAttemptAt = LocalDateTime.now();
+        }
+        if (this.status == null) {
+            this.status = EmailStatus.PENDING;
+        }
+        if (this.retryCount < 0) {
+            this.retryCount = 0;
+        }
+    }
 }

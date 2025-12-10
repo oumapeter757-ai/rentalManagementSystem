@@ -1,11 +1,10 @@
-package com.peterscode.rentalmanagementsystem.service;
+package com.peterscode.rentalmanagementsystem.service.payment;
 
 import com.peterscode.rentalmanagementsystem.dto.request.MpesaStkRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentSummaryResponse;
-import com.peterscode.rentalmanagementsystem.model.payment.Payment;
 
 import java.math.BigDecimal;
 import java.util.List;

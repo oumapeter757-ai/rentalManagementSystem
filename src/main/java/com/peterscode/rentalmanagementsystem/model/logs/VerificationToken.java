@@ -3,18 +3,17 @@ package com.peterscode.rentalmanagementsystem.model.logs;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "email_verification_tokens")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class EmailVerificationToken {
+public class VerificationToken {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,16 +22,17 @@ public class EmailVerificationToken {
     @Column(nullable = false, unique = true)
     private String token;
 
-    @Column(nullable = false)
-    private boolean used;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @CreationTimestamp
-    private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime expiryDate;
 
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
+    @PrePersist
+    protected void onCreate() {
+        if (expiryDate == null) {
+            expiryDate = LocalDateTime.now().plusHours(24);
+        }
+    }
 }

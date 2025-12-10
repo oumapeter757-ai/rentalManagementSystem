@@ -33,14 +33,21 @@ CREATE TABLE password_reset_tokens (
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 
-CREATE TABLE email_logs (
-                            id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                            recipient_email VARCHAR(100) NOT NULL,
-                            subject VARCHAR(200) NOT NULL,
-                            body VARCHAR(1000),
-                            sent BOOLEAN NOT NULL,
-                            error_message VARCHAR(500),
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS email_logs (
+                                          id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                                          recipient VARCHAR(255) NOT NULL,
+                                          subject VARCHAR(500) NOT NULL,
+                                          body TEXT,
+                                          template_name VARCHAR(100),
+                                          status VARCHAR(20) NOT NULL,
+                                          retry_count INT NOT NULL DEFAULT 0,
+                                          sent_at TIMESTAMP NULL,
+                                          last_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                          error_message TEXT,
+                                          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+                                          INDEX idx_email_logs_recipient (recipient),
+                                          INDEX idx_email_logs_status (status),
+                                          INDEX idx_email_logs_created_at (created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

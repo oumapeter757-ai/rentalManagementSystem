@@ -5,19 +5,19 @@ import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.ApiResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentResponse;
-import com.peterscode.rentalmanagementsystem.service.PaymentService;
+import com.peterscode.rentalmanagementsystem.dto.response.PaymentSummaryResponse;
+import com.peterscode.rentalmanagementsystem.service.payment.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -25,11 +25,9 @@ import java.util.List;
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
 @Slf4j
-
 public class PaymentController {
 
     private final PaymentService paymentService;
-
 
     @PostMapping
     @PreAuthorize("hasAnyRole('TENANT', 'ADMIN')")
@@ -58,6 +56,31 @@ public class PaymentController {
 
         return ResponseEntity.ok(
                 ApiResponse.ok("M-Pesa payment initiated", response)
+        );
+    }
+
+    @GetMapping("/transaction/{transactionCode}")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get payment by transaction code")
+    public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentByTransactionCode(
+            @PathVariable String transactionCode) {
+
+        PaymentResponse payment = paymentService.getPaymentByTransactionCode(transactionCode);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment fetched successfully", payment)
+        );
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get all payments")
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getAllPayments() {
+
+        List<PaymentResponse> payments = paymentService.getAllPayments();
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("All payments fetched successfully", payments)
         );
     }
 
@@ -139,6 +162,22 @@ public class PaymentController {
         );
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Update payment")
+    public ResponseEntity<ApiResponse<PaymentResponse>> updatePayment(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody PaymentRequest request) {
+
+        String callerEmail = authentication.getName();
+        PaymentResponse payment = paymentService.updatePayment(id, request, callerEmail);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment updated successfully", payment)
+        );
+    }
+
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
     @Operation(summary = "Update payment status")
@@ -173,12 +212,73 @@ public class PaymentController {
     @GetMapping("/summary")
     @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
     @Operation(summary = "Get payment summary")
-    public ResponseEntity<ApiResponse<Object>> getPaymentSummary() {
+    public ResponseEntity<ApiResponse<PaymentSummaryResponse>> getPaymentSummary() {
 
-        Object summary = paymentService.getPaymentSummary();
+        PaymentSummaryResponse summary = paymentService.getPaymentSummary();
 
         return ResponseEntity.ok(
                 ApiResponse.ok("Payment summary fetched", summary)
+        );
+    }
+
+    @GetMapping("/revenue/total")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Get total revenue")
+    public ResponseEntity<ApiResponse<BigDecimal>> getTotalRevenue() {
+
+        BigDecimal totalRevenue = paymentService.getTotalRevenue();
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Total revenue calculated", totalRevenue)
+        );
+    }
+
+    @GetMapping("/revenue/tenant/{tenantId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Get total revenue by tenant")
+    public ResponseEntity<ApiResponse<BigDecimal>> getTotalRevenueByTenant(
+            @PathVariable Long tenantId) {
+
+        BigDecimal revenue = paymentService.getTotalRevenueByTenant(tenantId);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Total revenue by tenant calculated", revenue)
+        );
+    }
+
+    @GetMapping("/{id}/success")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Check if payment is successful")
+    public ResponseEntity<ApiResponse<Boolean>> isPaymentSuccessful(@PathVariable Long id) {
+
+        boolean isSuccessful = paymentService.isPaymentSuccessful(id);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment success status checked", isSuccessful)
+        );
+    }
+
+    @GetMapping("/{id}/pending")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Check if payment is pending")
+    public ResponseEntity<ApiResponse<Boolean>> isPaymentPending(@PathVariable Long id) {
+
+        boolean isPending = paymentService.isPaymentPending(id);
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment pending status checked", isPending)
+        );
+    }
+
+    @GetMapping("/generate-transaction-code")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Generate a new transaction code")
+    public ResponseEntity<ApiResponse<String>> generateTransactionCode() {
+
+        String transactionCode = paymentService.generateTransactionCode();
+
+        return ResponseEntity.ok(
+                ApiResponse.ok("Transaction code generated", transactionCode)
         );
     }
 
@@ -198,17 +298,13 @@ public class PaymentController {
     }
 }
 
-
 @RestController
 @RequestMapping("/api/payments/mpesa")
+@RequiredArgsConstructor
+@Slf4j
 class MpesaCallbackController {
-    private static final Logger log = LoggerFactory.getLogger(MpesaCallbackController.class);
 
     private final PaymentService paymentService;
-
-    public MpesaCallbackController(PaymentService paymentService) {
-        this.paymentService = paymentService;
-    }
 
     @PostMapping("/callback")
     @Operation(summary = "M-Pesa callback endpoint")
@@ -217,6 +313,7 @@ class MpesaCallbackController {
             paymentService.processMpesaCallback(callbackData);
             return ResponseEntity.ok("Callback processed successfully");
         } catch (Exception e) {
+            log.error("Error processing M-Pesa callback", e);
             return ResponseEntity.status(500).body("Error processing callback");
         }
     }
@@ -232,7 +329,12 @@ class MpesaCallbackController {
     @Operation(summary = "M-Pesa confirmation endpoint")
     public ResponseEntity<String> handleConfirmation(@RequestBody String confirmationData) {
         log.info("Received M-Pesa confirmation request: {}", confirmationData);
-        paymentService.processMpesaCallback(confirmationData);
-        return ResponseEntity.ok("Confirmation received");
+        try {
+            paymentService.processMpesaCallback(confirmationData);
+            return ResponseEntity.ok("Confirmation received and processed");
+        } catch (Exception e) {
+            log.error("Error processing M-Pesa confirmation", e);
+            return ResponseEntity.status(500).body("Error processing confirmation");
+        }
     }
 }

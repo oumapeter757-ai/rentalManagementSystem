@@ -9,25 +9,29 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000}")
-    private String[] allowedOrigins;
+    @Value("${app.upload-dir:./uploads}")
+    private String uploadDir;
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
-                .allowedOrigins(allowedOrigins)
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true)
-                .maxAge(3600);
+
     }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:./uploads/");
 
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:" + uploadDir + "/")
+                .setCachePeriod(3600);
+
+        // Serve static assets
+        registry.addResourceHandler("/static/**")
+                .addResourceLocations("classpath:/static/")
+                .setCachePeriod(3600);
+
+        // Swagger UI
         registry.addResourceHandler("/swagger-ui/**")
-                .addResourceLocations("classpath:/META-INF/resources/webjars/springfox-swagger-ui/");
+                .addResourceLocations("classpath:/META-INF/resources/webjars/springdoc-openapi-ui/")
+                .resourceChain(false);
     }
 }

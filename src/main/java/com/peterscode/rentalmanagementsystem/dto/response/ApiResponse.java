@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.jspecify.annotations.Nullable;
 
 import java.time.LocalDateTime;
 
@@ -65,6 +66,7 @@ public class ApiResponse<T> {
                 .build();
     }
 
+
     // Helper to set path
     public ApiResponse<T> withPath(String path) {
         this.path = path;
@@ -72,6 +74,14 @@ public class ApiResponse<T> {
     }
 
     public static <T> ApiResponse<T> ok(String message, T data) {
+        return ApiResponse.<T>builder()
+                .success(true)
+                .message(message)
+                .data(data)
+                .build();
+    }
+
+    public static <T> ApiResponse<T> created(String message, T data) {
         return ApiResponse.<T>builder()
                 .success(true)
                 .message(message)

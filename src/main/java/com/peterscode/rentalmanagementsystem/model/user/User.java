@@ -43,6 +43,7 @@ public class User {
     @Column(name = "enabled")
     private boolean enabled = true;
 
+
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 

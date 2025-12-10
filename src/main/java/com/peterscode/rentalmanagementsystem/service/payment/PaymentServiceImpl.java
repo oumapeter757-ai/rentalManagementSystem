@@ -16,7 +16,7 @@ import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.PaymentRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
 
-import com.peterscode.rentalmanagementsystem.service.PaymentService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
