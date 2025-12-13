@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f8fafc;
+            border-radius: 10px;
+            padding: 30px;
+            border-left: 5px solid #10B981;
+        }
+        .success-icon {
+            color: #10B981;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div style="text-align: center;">
+        <div class="success-icon">✓</div>
+        <h2>Welcome to Rental Management System!</h2>
+    </div>
+
+    <p>Hello <strong th:text="${firstName}">User</strong>,</p>
+
+    <p>🎉 <strong>Congratulations!</strong> Your account has been successfully verified and activated.</p>
+
+    <p>You can now log in to your account and start:</p>
+    <ul>
+        <li>📋 Managing your rental properties</li>
+        <li>👥 Communicating with tenants/landlords</li>
+        <li>💰 Tracking rental payments</li>
+        <li>📊 Viewing analytics and reports</li>
+    </ul>
+
+    <p>To get started, please visit: <a th:href="${frontendUrl}/login" style="color: #4F46E5; font-weight: bold;">Login to Your Account</a></p>
+
+    <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+
+    <div class="footer">
+        <p>Best regards,<br>The Rental Management System Team</p>
+        <p>© <span th:text="${currentYear}">2025</span> Rental Management System</p>
+    </div>
+</div>
+</body>
+</html>

@@ -17,7 +17,7 @@ public class PaymentRequest {
     private BigDecimal amount;
 
     @NotBlank(message = "Payment method is required")
-    @Pattern(regexp = "^(MPESA|CASH|BANK_TRANSFER|CHEQUE|CREDIT_CARD|DEBIT_CARD|MOBILE_WALLET|PAYPAL|OTHER)$",
+    @Pattern(regexp = "^(MPESA|CASH|BANK_TRANSFER|CHEQUE|CREDIT_CARD|DEBIT_CARD|MOBILE_WALLET|OTHER)$",
             message = "Invalid payment method")
     private String paymentMethod;
 
@@ -26,7 +26,4 @@ public class PaymentRequest {
 
     @Size(max = 1000, message = "Notes cannot exceed 1000 characters")
     private String notes;
-
-
-    private String mpesaCallbackUrl;
 }

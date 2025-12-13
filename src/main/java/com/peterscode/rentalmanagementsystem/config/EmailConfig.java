@@ -1,4 +1,3 @@
-
 package com.peterscode.rentalmanagementsystem.config;
 
 import org.springframework.context.annotation.Bean;
@@ -10,15 +9,15 @@ import java.util.concurrent.Executor;
 
 @Configuration
 @EnableAsync
-public class AsyncConfig {
+public class EmailConfig {
 
     @Bean(name = "emailTaskExecutor")
     public Executor emailTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(5);
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(10);
         executor.setQueueCapacity(100);
-        executor.setThreadNamePrefix("email-");
+        executor.setThreadNamePrefix("email-task-");
         executor.initialize();
         return executor;
     }

@@ -1,4 +1,6 @@
 -- 1. Create users table first (no dependencies)
+
+
 CREATE TABLE users (
                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
                        email VARCHAR(255) NOT NULL UNIQUE,
@@ -27,9 +29,13 @@ CREATE TABLE password_reset_tokens (
                                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
                                        token VARCHAR(255) NOT NULL UNIQUE,
                                        user_id BIGINT NOT NULL,
-                                       expiry_date TIMESTAMP NOT NULL,
-                                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                                       expiry_date DATETIME NOT NULL,
+                                       used BOOLEAN DEFAULT FALSE NOT NULL,
+                                       used_at DATETIME NULL,
+                                       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                                       INDEX idx_token (token),
+                                       INDEX idx_user_id (user_id)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 

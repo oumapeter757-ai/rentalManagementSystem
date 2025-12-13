@@ -1,15 +1,19 @@
 package com.peterscode.rentalmanagementsystem.service.auth;
 
 import com.peterscode.rentalmanagementsystem.config.AppConfig;
+import com.peterscode.rentalmanagementsystem.dto.request.EmailRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.LoginRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.RegisterRequest;
+import com.peterscode.rentalmanagementsystem.dto.request.ResetPasswordRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.JwtResponse;
 import com.peterscode.rentalmanagementsystem.exception.*;
 
+import com.peterscode.rentalmanagementsystem.model.logs.PasswordResetToken;
 import com.peterscode.rentalmanagementsystem.model.logs.VerificationToken;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 
+import com.peterscode.rentalmanagementsystem.repository.PasswordResetTokenRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
 
 import com.peterscode.rentalmanagementsystem.repository.VerificationTokenRepository;
@@ -21,6 +25,8 @@ import com.peterscode.rentalmanagementsystem.util.NetworkUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -31,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,8 +55,13 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
 
+
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+
     private final AppConfig appConfig;
 
+    @Value("${app.frontend-url:http://localhost:5174}")
+    private String frontendUrl;
 
     @Override
     public boolean register(RegisterRequest request) {
@@ -81,7 +94,6 @@ public class AuthServiceImpl implements AuthService {
 
         // Send verification email
         sendVerificationEmail(savedUser, token);
-
 
         log.info("User registered successfully: {}", savedUser.getEmail());
         return true;
@@ -211,6 +223,7 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+
     @Override
     public JwtResponse registerTenant(RegisterRequest request) {
         log.info("Registering tenant: {}", request.getEmail());
@@ -240,6 +253,7 @@ public class AuthServiceImpl implements AuthService {
 
         // Send verification email
         sendVerificationEmail(savedTenant, token);
+
 
         String jwtToken = jwtService.generateToken(savedTenant);
         return JwtResponse.builder()
@@ -293,44 +307,31 @@ public class AuthServiceImpl implements AuthService {
 
     private void sendVerificationEmail(User user, String token) {
         try {
-            String verificationLink = appConfig.getVerificationUrl(token);
+            // Use frontend URL for verification link
+            String verificationLink = frontendUrl + "/auth/verify-email?token=" + token;
             String subject = "Verify Your Email - Rental Management System";
 
-            String body = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; }
-                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                        .button { background-color: #4CAF50; color: white; padding: 12px 24px; 
-                                 text-decoration: none; border-radius: 4px; display: inline-block; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h2>Email Verification</h2>
-                        <p>Hello %s,</p>
-                        <p>Please verify your email address by clicking the button below:</p>
-                        <a href="%s" class="button">Verify Email</a>
-                        <p>This link will expire in 24 hours.</p>
-                        <p>If you didn't create an account, please ignore this email.</p>
-                    </div>
-                </body>
-                </html>
-                """.formatted(user.getFirstName(), verificationLink);
+            // Create variables map for template
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", user.getFirstName());
+            variables.put("verificationLink", verificationLink);
+            variables.put("expiryHours", 24);
 
+            // Create EmailRequest with variables
             com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
                     com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
                             .recipient(user.getEmail())
                             .subject(subject)
-                            .body(body)
                             .templateName("email-verification")
+                            .variables(variables)
+                            .html(true)
                             .build();
 
             emailService.sendEmailAsync(emailRequest);
-            log.info("Verification email sent to: {}", user.getEmail());
+            log.info("📧 Verification email sent to: {}", user.getEmail());
+
+            // Also log the verification link for manual testing (development)
+            log.info("🔗 Verification link for manual testing: {}", verificationLink);
 
         } catch (Exception e) {
             log.error("Failed to send verification email to {}: {}", user.getEmail(), e.getMessage());
@@ -341,6 +342,14 @@ public class AuthServiceImpl implements AuthService {
         try {
             String subject = "Welcome to Rental Management System - Registration Successful";
             String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+            // Create variables map
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", user.getFirstName());
+            variables.put("lastName", user.getLastName());
+            variables.put("userType", userType);
+            variables.put("email", user.getEmail());
+            variables.put("registeredTime", currentTime);
 
             String body = """
                 <!DOCTYPE html>
@@ -372,6 +381,8 @@ public class AuthServiceImpl implements AuthService {
                             .subject(subject)
                             .body(body)
                             .templateName("registration-success")
+                            .variables(variables)
+                            .html(true)
                             .build();
 
             emailService.sendEmailAsync(emailRequest);
@@ -386,34 +397,18 @@ public class AuthServiceImpl implements AuthService {
         try {
             String subject = "Welcome to Rental Management System!";
 
-            String body = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; }
-                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h2>Welcome Aboard!</h2>
-                        <p>Hello %s,</p>
-                        <p>Your email has been successfully verified. Your account is now fully activated.</p>
-                        <p>You can now log in and start using all the features of our Rental Management System.</p>
-                        <p>Thank you for joining us!</p>
-                    </div>
-                </body>
-                </html>
-                """.formatted(user.getFirstName());
+            // Create variables map
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", user.getFirstName());
+            variables.put("frontendUrl", frontendUrl);
 
             com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
                     com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
                             .recipient(user.getEmail())
                             .subject(subject)
-                            .body(body)
                             .templateName("welcome")
+                            .variables(variables)
+                            .html(true)
                             .build();
 
             emailService.sendEmailAsync(emailRequest);
@@ -429,38 +424,19 @@ public class AuthServiceImpl implements AuthService {
             String subject = "Security Alert: Successful Login to Rental Management System";
             String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            String body = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; }
-                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                        .alert { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="alert">
-                            <h3>Security Alert</h3>
-                            <p>A successful login was detected on your account.</p>
-                        </div>
-                        <p><strong>Account:</strong> %s</p>
-                        <p><strong>Login Time:</strong> %s</p>
-                        <p><strong>IP Address:</strong> %s</p>
-                        <p>If this wasn't you, please contact support immediately.</p>
-                    </div>
-                </body>
-                </html>
-                """.formatted(user.getEmail(), currentTime, ipAddress);
+            // Create variables map
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("email", user.getEmail());
+            variables.put("loginTime", currentTime);
+            variables.put("ipAddress", ipAddress);
 
             com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
                     com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
                             .recipient(user.getEmail())
                             .subject(subject)
-                            .body(body)
                             .templateName("login-success")
+                            .variables(variables)
+                            .html(true)
                             .build();
 
             emailService.sendEmailAsync(emailRequest);
@@ -468,6 +444,125 @@ public class AuthServiceImpl implements AuthService {
 
         } catch (Exception e) {
             log.error("Failed to send login email to {}: {}", user.getEmail(), e.getMessage());
+        }
+    }
+
+    @Override
+    public void initiatePasswordReset(String email) {
+        log.info("Password reset requested for: {}", email);
+
+        User user = userRepository.findByEmailIgnoreCase(email.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+
+        if (!user.isEnabled()) {
+            throw new BadRequestException("Account is not verified. Please verify your email first.");
+        }
+
+        // Delete any existing reset tokens
+
+        passwordResetTokenRepository.deleteByUser(user);
+
+        // Create new reset token
+        String token = UUID.randomUUID().toString();
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .token(token)
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusHours(2)) // 2 hours expiry
+                .build();
+        passwordResetTokenRepository.save(resetToken);
+
+        // Send password reset email
+        sendPasswordResetEmail(user, token);
+
+        log.info("Password reset token created for user: {}", user.getEmail());
+    }
+
+    @Override
+    public void resetPassword(ResetPasswordRequest request) {
+        log.info("Password reset attempt with token: {}", request.getToken().substring(0, 10) + "...");
+
+        // Validate passwords match
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BadRequestException("Passwords do not match");
+        }
+
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired reset token"));
+
+        if (resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Reset token has expired");
+        }
+
+        if (resetToken.isUsed()) {
+            throw new BadRequestException("Reset token has already been used");
+        }
+
+        User user = resetToken.getUser();
+
+        // Update password
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // Mark token as used
+        resetToken.setUsed(true);
+        resetToken.setUsedAt(LocalDateTime.now());
+        passwordResetTokenRepository.save(resetToken);
+
+        // Send password changed notification
+        sendPasswordChangedEmail(user);
+
+        log.info("Password reset successful for user: {}", user.getEmail());
+    }
+
+    // Add this helper method
+    private void sendPasswordResetEmail(User user, String token) {
+        try {
+            String resetLink = frontendUrl + "/auth/reset-password?token=" + token;
+            String subject = "Reset Your Password - Rental Management System";
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", user.getFirstName());
+            variables.put("resetLink", resetLink);
+            variables.put("expiryHours", 2);
+
+            EmailRequest emailRequest = EmailRequest.builder()
+                    .recipient(user.getEmail())
+                    .subject(subject)
+                    .templateName("password-reset")
+                    .variables(variables)
+                    .html(true)
+                    .build();
+
+            emailService.sendEmailAsync(emailRequest);
+            log.info("Password reset email sent to: {}", user.getEmail());
+
+        } catch (Exception e) {
+            log.error("Failed to send password reset email to {}: {}", user.getEmail(), e.getMessage());
+        }
+    }
+
+    private void sendPasswordChangedEmail(User user) {
+        try {
+            String subject = "Password Changed Successfully - Rental Management System";
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", user.getFirstName());
+            variables.put("changedTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+
+            EmailRequest emailRequest = EmailRequest.builder()
+                    .recipient(user.getEmail())
+                    .subject(subject)
+                    .templateName("password-changed")
+                    .variables(variables)
+                    .html(true)
+                    .build();
+
+            emailService.sendEmailAsync(emailRequest);
+            log.info("Password changed notification sent to: {}", user.getEmail());
+
+        } catch (Exception e) {
+            log.error("Failed to send password changed email to {}: {}", user.getEmail(), e.getMessage());
         }
     }
 }

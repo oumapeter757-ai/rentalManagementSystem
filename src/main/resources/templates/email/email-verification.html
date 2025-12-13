@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4F46E5;
+            margin-bottom: 10px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4F46E5;
+            color: white;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 25px 0;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #4338CA;
+        }
+        .link-container {
+            word-break: break-all;
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="logo">🏠 Rental Management System</div>
+        <h2>Verify Your Email Address</h2>
+    </div>
+
+    <p>Hello <strong th:text="${firstName}">User</strong>,</p>
+
+    <p>Thank you for registering with Rental Management System. To complete your registration and verify your email address, please click the button below:</p>
+
+    <div style="text-align: center;">
+        <a th:href="${verificationLink}" class="button">Verify Email Address</a>
+    </div>
+
+    <p>This verification link will expire in <strong th:text="${expiryHours}">24</strong> hours.</p>
+
+    <p>If the button above doesn't work, you can copy and paste the following link into your browser:</p>
+
+    <div class="link-container">
+        <code th:text="${verificationLink}"></code>
+    </div>
+
+    <p>If you didn't create an account with us, please ignore this email.</p>
+
+    <div class="footer">
+        <p>© <span th:text="${currentYear}">2025</span> Rental Management System. All rights reserved.</p>
+        <p>This is an automated message, please do not reply to this email.</p>
+        <p><a th:href="${frontendUrl}">Visit our website</a></p>
+    </div>
+</div>
+
+<div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666;">
+    <p><strong>Need help?</strong></p>
+    <p>If you didn't request this email or need a new verification link, visit:</p>
+    <p><a th:href="${frontendUrl} + '/auth/resend-verification'" style="color: #4F46E5;">
+        [[${frontendUrl}]]/auth/resend-verification
+    </a></p>
+    <p>Or contact support at: support@rentalsystem.com</p>
+</div>
+</body>
+</html>

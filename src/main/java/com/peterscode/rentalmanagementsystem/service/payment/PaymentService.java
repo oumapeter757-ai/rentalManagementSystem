@@ -10,12 +10,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public interface PaymentService {
-
-    // Create payment
     PaymentResponse createPayment(PaymentRequest request, String callerEmail);
     MpesaStkResponse initiateMpesaPayment(MpesaStkRequest request, String callerEmail);
-
-    // Read operations
+    void processMpesaCallback(String callbackData);
     PaymentResponse getPaymentById(Long id);
     PaymentResponse getPaymentByTransactionCode(String transactionCode);
     List<PaymentResponse> getAllPayments();
@@ -24,24 +21,19 @@ public interface PaymentService {
     List<PaymentResponse> getPaymentsByMethod(String method);
     List<PaymentResponse> getMyPayments(String callerEmail);
     List<PaymentResponse> getPendingMpesaCallbacks();
-
-    // Update operations
     PaymentResponse updatePaymentStatus(Long id, String status, String notes);
     PaymentResponse updatePayment(Long id, PaymentRequest request, String callerEmail);
-    void processMpesaCallback(String callbackData);
     PaymentResponse markAsPaid(Long id, String transactionCode, String callerEmail);
-
-    // Summary and statistics
     PaymentSummaryResponse getPaymentSummary();
-    //PaymentSummaryResponse getPaymentSummaryByTenant(Long tenantId);
     BigDecimal getTotalRevenue();
     BigDecimal getTotalRevenueByTenant(Long tenantId);
-
-    // Utility methods
     boolean isPaymentSuccessful(Long id);
     boolean isPaymentPending(Long id);
     String generateTransactionCode();
-
-    // Delete operations
     void deletePayment(Long id, String callerEmail);
+
+    // New methods for enhanced flow
+    PaymentResponse reversePayment(Long id, String reversalReason, String callerEmail);
+    PaymentResponse refundPayment(Long id, BigDecimal refundAmount, String reason, String callerEmail);
+    void queryMpesaTransactionStatus(String checkoutRequestId);
 }

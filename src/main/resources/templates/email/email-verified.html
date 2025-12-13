@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification Result</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .success {
+            color: #10B981;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .error {
+            color: #EF4444;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4F46E5;
+            color: white;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 25px 0;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #4338CA;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        .auto-redirect {
+            font-size: 14px;
+            color: #666;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container" th:if="${success}">
+    <div class="success">✅</div>
+    <h2>Email Verified Successfully!</h2>
+    <p>Your email address has been verified and your account is now active.</p>
+    <p>You can now log in to the Rental Management System.</p>
+
+    <a th:href="${frontendUrl} + '/auth/login'" class="button">Go to Login Page</a>
+
+    <p class="auto-redirect">You will be automatically redirected in <span id="countdown">5</span> seconds...</p>
+</div>
+
+<div class="container" th:unless="${success}">
+    <div class="error">❌</div>
+    <h2>Email Verification Failed</h2>
+    <p th:text="${message}">The verification token is invalid or has expired.</p>
+
+    <a th:href="${frontendUrl} + '/auth/resend-verification'" class="button">Request New Verification Email</a>
+
+    <div class="footer">
+        <p>© <span th:text="${currentYear}">2025</span> Rental Management System. All rights reserved.</p>
+    </div>
+</div>
+
+<script th:if="${success}">
+    // Auto-redirect after 5 seconds
+    let countdown = 5;
+    const countdownElement = document.getElementById('countdown');
+
+    const timer = setInterval(() => {
+        countdown--;
+        countdownElement.textContent = countdown;
+
+        if (countdown <= 0) {
+            clearInterval(timer);
+            window.location.href = [[${frontendUrl}]] + '/auth/login';
+        }
+    }, 1000);
+</script>
+</body>
+</html>

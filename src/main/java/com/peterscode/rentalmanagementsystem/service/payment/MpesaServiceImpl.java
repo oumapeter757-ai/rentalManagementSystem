@@ -3,7 +3,7 @@ package com.peterscode.rentalmanagementsystem.service.payment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peterscode.rentalmanagementsystem.config.MpesaConfig;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
-
+import com.peterscode.rentalmanagementsystem.dto.response.MpesaTransactionStatusResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -40,16 +40,12 @@ public class MpesaServiceImpl implements MpesaService {
 
             ResponseEntity<String> response = restTemplate.exchange(
                     mpesaConfig.getAuthUrl() + "?grant_type=client_credentials",
-                    HttpMethod.GET,
-                    entity,
-                    String.class
-            );
+                    HttpMethod.GET, entity, String.class);
 
             Map<String, Object> result = objectMapper.readValue(response.getBody(), Map.class);
             return (String) result.get("access_token");
-
         } catch (Exception e) {
-            log.error("Error getting M-Pesa access token: {}", e.getMessage());
+            log.error("Error getting access token: {}", e.getMessage());
             throw new RuntimeException("Failed to get M-Pesa access token", e);
         }
     }
@@ -59,12 +55,9 @@ public class MpesaServiceImpl implements MpesaService {
                                             String accountReference, String description) {
         try {
             String accessToken = getAccessToken();
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-
-            // Generate password
+            String timestamp = generateTimestamp();
             String password = generatePassword(timestamp);
 
-            // Prepare request body
             Map<String, Object> stkRequest = new HashMap<>();
             stkRequest.put("BusinessShortCode", mpesaConfig.getShortcode());
             stkRequest.put("Password", password);
@@ -84,31 +77,63 @@ public class MpesaServiceImpl implements MpesaService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(stkRequest, headers);
 
-            log.info("Sending STK Push request to: {}", mpesaConfig.getStkPushUrl());
-            log.info("Request body: {}", objectMapper.writeValueAsString(stkRequest));
+            log.info("Sending STK Push to: {}, Phone: {}, Amount: {}",
+                    mpesaConfig.getStkPushUrl(), phoneNumber, amount);
 
             ResponseEntity<MpesaStkResponse> response = restTemplate.exchange(
-                    mpesaConfig.getStkPushUrl(),
-                    HttpMethod.POST,
-                    entity,
-                    MpesaStkResponse.class
-            );
+                    mpesaConfig.getStkPushUrl(), HttpMethod.POST, entity, MpesaStkResponse.class);
 
             MpesaStkResponse stkResponse = response.getBody();
             if (stkResponse != null) {
                 stkResponse.setTimestamp(timestamp);
-                log.info("STK Push response: {}", objectMapper.writeValueAsString(stkResponse));
+                log.info("STK Push response: MerchantRequestID={}, CheckoutRequestID={}",
+                        stkResponse.getMerchantRequestID(), stkResponse.getCheckoutRequestID());
             }
 
             return stkResponse;
-
         } catch (Exception e) {
             log.error("Error initiating STK push: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to initiate M-Pesa payment", e);
         }
     }
 
-    private String generatePassword(String timestamp) {
+    @Override
+    public MpesaTransactionStatusResponse queryTransactionStatus(String checkoutRequestId) {
+        try {
+            String accessToken = getAccessToken();
+            String timestamp = generateTimestamp();
+            String password = generatePassword(timestamp);
+
+            Map<String, Object> queryRequest = new HashMap<>();
+            queryRequest.put("BusinessShortCode", mpesaConfig.getShortcode());
+            queryRequest.put("Password", password);
+            queryRequest.put("Timestamp", timestamp);
+            queryRequest.put("CheckoutRequestID", checkoutRequestId);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(accessToken);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(queryRequest, headers);
+
+            ResponseEntity<MpesaTransactionStatusResponse> response = restTemplate.exchange(
+                    "https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query",
+                    HttpMethod.POST, entity, MpesaTransactionStatusResponse.class);
+
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Error querying transaction status: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public String generateTimestamp() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+    }
+
+    @Override
+    public String generatePassword(String timestamp) {
         try {
             String data = mpesaConfig.getShortcode() + mpesaConfig.getPasskey() + timestamp;
             return Base64.getEncoder().encodeToString(data.getBytes(StandardCharsets.UTF_8));
@@ -124,10 +149,8 @@ public class MpesaServiceImpl implements MpesaService {
             return null;
         }
 
-        // Remove any non-digit characters
         String digits = phoneNumber.replaceAll("[^0-9]", "");
 
-        // Convert to 254 format if needed
         if (digits.startsWith("0")) {
             return "254" + digits.substring(1);
         } else if (digits.startsWith("7") && digits.length() == 9) {
@@ -138,7 +161,6 @@ public class MpesaServiceImpl implements MpesaService {
             return digits.substring(1);
         }
 
-        // Return as-is if already in correct format
         return phoneNumber;
     }
 }

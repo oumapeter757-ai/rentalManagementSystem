@@ -2,6 +2,7 @@ package com.peterscode.rentalmanagementsystem.service.auth;
 
 import com.peterscode.rentalmanagementsystem.dto.request.LoginRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.RegisterRequest;
+import com.peterscode.rentalmanagementsystem.dto.request.ResetPasswordRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.JwtResponse;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,4 +20,6 @@ public interface AuthService {
     JwtResponse createUserByAdmin(RegisterRequest request, Role role);
     JwtResponse registerTenant(RegisterRequest request);
     JwtResponse login(LoginRequest request, HttpServletRequest httpRequest);
+    void initiatePasswordReset(String email);
+    void resetPassword(ResetPasswordRequest request);
 }
