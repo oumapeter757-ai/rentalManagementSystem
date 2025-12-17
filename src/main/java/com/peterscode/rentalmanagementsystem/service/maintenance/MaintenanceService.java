@@ -1,4 +1,4 @@
-package com.peterscode.rentalmanagementsystem.service;
+package com.peterscode.rentalmanagementsystem.service.maintenance;
 
 import com.peterscode.rentalmanagementsystem.dto.request.MaintenanceRequestDto;
 import com.peterscode.rentalmanagementsystem.dto.request.MaintenanceUpdateDto;

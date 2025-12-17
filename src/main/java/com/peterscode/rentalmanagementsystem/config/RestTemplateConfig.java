@@ -11,8 +11,7 @@ public class RestTemplateConfig {
 
     @Bean
     public RestTemplate restTemplate() {
-        RestTemplate restTemplate = new RestTemplate(getClientHttpRequestFactory());
-        return restTemplate;
+        return new RestTemplate(getClientHttpRequestFactory());
     }
 
     private ClientHttpRequestFactory getClientHttpRequestFactory() {

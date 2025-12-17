@@ -42,7 +42,7 @@ public class MpesaServiceImpl implements MpesaService {
                     mpesaConfig.getAuthUrl() + "?grant_type=client_credentials",
                     HttpMethod.GET, entity, String.class);
 
-            Map<String, Object> result = objectMapper.readValue(response.getBody(), Map.class);
+            Map result = objectMapper.readValue(response.getBody(), Map.class);
             return (String) result.get("access_token");
         } catch (Exception e) {
             log.error("Error getting access token: {}", e.getMessage());

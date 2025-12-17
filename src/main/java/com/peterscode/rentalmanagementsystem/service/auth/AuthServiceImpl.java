@@ -240,7 +240,6 @@ public class AuthServiceImpl implements AuthService {
     public JwtResponse registerTenant(RegisterRequest request) {
         log.info("Registering tenant: {}", request.getEmail());
 
-        validateEmailNotExists(request.getEmail());
 
         User tenant = User.builder()
                 .email(request.getEmail().toLowerCase().trim())

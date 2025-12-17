@@ -29,7 +29,7 @@ public class LeaseCreateRequest {
     @DecimalMin(value = "0.0", inclusive = false)
     private BigDecimal monthlyRent;
 
-    @DecimalMin(value = "0.0", inclusive = true)
+    @DecimalMin(value = "0.0")
     private BigDecimal deposit;
 
     private String notes;

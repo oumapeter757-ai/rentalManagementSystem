@@ -66,7 +66,7 @@ public class Property {
     @Column(name = "amenity")
     private List<String> amenities = new ArrayList<>();
 
-    @Column(length = 255)
+    @Column()
     private String mainImageUrl;
 
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

@@ -1,6 +1,7 @@
 package com.peterscode.rentalmanagementsystem.model.user;
 
 import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
+import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenanceRequest;
 import com.peterscode.rentalmanagementsystem.model.property.Property;
 import jakarta.persistence.*;
 import lombok.*;
@@ -56,6 +57,8 @@ public class User {
 
     @OneToMany(mappedBy = "tenant", cascade = CascadeType.ALL)
     private List<RentalApplication> rentalApplications;
+
+
 
 
 

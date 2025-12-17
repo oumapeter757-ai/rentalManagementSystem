@@ -58,7 +58,7 @@ public class FileController {
                 fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
             }
 
-            String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+            String uniqueFilename = UUID.randomUUID() + fileExtension;
             Path filePath = uploadPath.resolve(uniqueFilename);
 
             // Save file

@@ -364,13 +364,13 @@ public class EmailServiceImpl implements EmailService {
                 <style>
                     body { font-family: Arial, sans-serif; line-height: 1.6; }
                     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    .button { 
-                        background-color: #4F46E5; 
-                        color: white; 
-                        padding: 12px 24px; 
-                        text-decoration: none; 
-                        border-radius: 4px; 
-                        display: inline-block; 
+                    .button {\s
+                        background-color: #4F46E5;\s
+                        color: white;\s
+                        padding: 12px 24px;\s
+                        text-decoration: none;\s
+                        border-radius: 4px;\s
+                        display: inline-block;\s
                     }
                 </style>
             </head>
@@ -386,7 +386,7 @@ public class EmailServiceImpl implements EmailService {
                 </div>
             </body>
             </html>
-            """, firstName, verificationLink, expiryHours, currentYear);
+           \s""", firstName, verificationLink, expiryHours, currentYear);
     }
 
     private String generatePasswordResetEmailHtml(String firstName, String token,
@@ -401,7 +401,7 @@ public class EmailServiceImpl implements EmailService {
                 <title>Reset Your Password</title>
                 <style>
                     body {
-                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        font-family: 'Segue UI', Tahoma, Geneva, Verdana, sans-serif;
                         line-height: 1.6;
                         color: #333;
                         margin: 0;
@@ -418,7 +418,7 @@ public class EmailServiceImpl implements EmailService {
                     }
                     .button {
                         display: inline-block;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
                         color: white;
                         text-decoration: none;
                         padding: 14px 32px;
@@ -453,37 +453,36 @@ public class EmailServiceImpl implements EmailService {
                     <h2>Reset Your Password</h2>
                     <p>Hello <strong>%s</strong>,</p>
                     <p>We received a request to reset your password for your Rental Management System account.</p>
-                    
+
                     <div style="text-align: center; margin: 25px 0;">
                         <a href="%s" class="button">Click Here to Reset Password</a>
                         <p style="font-size: 12px; color: #666; margin-top: 10px;">
                             (Click the button above to reset your password)
                         </p>
-                    </div>
-                    
+                    </div>  \s
                     <div class="token-box">
                         <strong>Your Reset Token:</strong><br>
                         <code>%s</code>
                     </div>
-                    
+                   \s
                     <p><strong>Alternative Method:</strong> If the button doesn't work, you can:</p>
                     <ol>
                         <li>Go to: %s/auth/reset-password</li>
                         <li>Enter this token: <code>%s</code></li>
                     </ol>
-                    
+                   \s
                     <p><strong>Or use this direct API link:</strong></p>
                     <div class="token-box">
                         <code>%s</code>
                     </div>
-                    
+                   \s
                     <p><strong>Important:</strong></p>
                     <ul>
                         <li>This token expires in <strong>%d hours</strong></li>
                         <li>Never share this token with anyone</li>
                         <li>If you didn't request this, please ignore this email</li>
                     </ul>
-                    
+                   \s
                     <div class="footer">
                         <p>© %d Rental Management System</p>
                         <p>This is an automated message. Please do not reply.</p>
@@ -491,7 +490,7 @@ public class EmailServiceImpl implements EmailService {
                 </div>
             </body>
             </html>
-            """, firstName, frontendResetLink, token, frontendUrl, token, directApiLink, expiryHours, currentYear);
+           \s""", firstName, frontendResetLink, token, frontendUrl, token, directApiLink, expiryHours, currentYear);
     }
 
     private String generatePasswordResetCodeEmailHtml(String firstName, String resetCode,
@@ -520,10 +519,10 @@ public class EmailServiceImpl implements EmailService {
                     </div>
                     <p>Hello <strong>%s</strong>,</p>
                     <p>You requested to reset your password. Use the verification code below to complete the reset process.</p>
-                    
+                   \s
                     <div class="code">%s</div>
                     <div class="expiry">⏰ This code expires in: %d minutes</div>
-                    
+                   \s
                     <div class="warning">
                         <strong>Security Notice:</strong>
                         <ul>
@@ -533,22 +532,22 @@ public class EmailServiceImpl implements EmailService {
                             <li>If you didn't request this, please ignore this email</li>
                         </ul>
                     </div>
-                    
+                   \s
                     <p><strong>How to use:</strong></p>
                     <ol>
                         <li>Go to: %s/auth/reset-password</li>
                         <li>Enter the 6-digit code: <strong>%s</strong></li>
                         <li>Create your new password</li>
                     </ol>
-                    
+                   \s
                     <div class="footer">
                         <p>© %d Rental Management System</p>
                         <p>This is an automated message. Please do not reply.</p>
                     </div>
                 </div>
             </body>
-            </html>
-            """, firstName, resetCode, expiryMinutes, expiryMinutes, frontendUrl, resetCode, currentYear);
+            </html>.
+           \s""", firstName, resetCode, expiryMinutes, expiryMinutes, frontendUrl, resetCode, currentYear);
     }
 
     private void logEmailDetails(EmailRequest emailRequest) {
@@ -579,7 +578,7 @@ public class EmailServiceImpl implements EmailService {
             log.info("   💡 To test with curl:");
             log.info("       curl -X POST '{}/api/auth/reset-password' \\", backendUrl);
             log.info("            -H 'Content-Type: application/json' \\");
-            log.info("            -d '{\"token\": \"%s\", \"newPassword\": \"NewPassword123!\", \"confirmPassword\": \"NewPassword123!\"}'", resetCode);
+
         }
     }
 

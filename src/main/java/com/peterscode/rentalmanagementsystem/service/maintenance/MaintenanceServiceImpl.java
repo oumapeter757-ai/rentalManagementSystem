@@ -11,7 +11,7 @@ import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.MaintenanceImageRepository;
 import com.peterscode.rentalmanagementsystem.repository.MaintenanceRequestRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
-import com.peterscode.rentalmanagementsystem.service.MaintenanceService;
+
 
 import com.peterscode.rentalmanagementsystem.util.FileStorageUtil;
 import lombok.RequiredArgsConstructor;
@@ -351,12 +351,7 @@ public class MaintenanceServiceImpl implements MaintenanceService {
             request.setStatus(updateDto.getStatus());
         }
 
-        if (updateDto.getAssignedToId() != null) {
-            // If you have assignedTo field, implement assignment logic
-            // User assignedTo = userRepository.findById(updateDto.getAssignedToId())
-            //         .orElseThrow(() -> new ResourceNotFoundException("Assigned user not found"));
-            // request.setAssignedTo(assignedTo);
-        }
+
     }
 
     @Override
@@ -406,9 +401,7 @@ public class MaintenanceServiceImpl implements MaintenanceService {
             throw new BadRequestException("Cannot assign to user without staff/maintenance role");
         }
 
-        // If you have an assignedTo field in MaintenanceRequest entity, uncomment:
-        // request.setAssignedTo(staff);
-        // request.setStatus(MaintenanceStatus.IN_PROGRESS);
+
 
         String assignmentNote = String.format("Assigned to %s (%s) by %s",
                 staff.getFirstName() + " " + staff.getLastName(), staff.getEmail(), callerEmail);

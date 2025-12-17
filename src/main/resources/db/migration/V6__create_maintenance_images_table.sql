@@ -1,4 +1,4 @@
-\
+
 CREATE TABLE IF NOT EXISTS maintenance_images (
                                                   id BIGINT PRIMARY KEY AUTO_INCREMENT,
                                                   maintenance_request_id BIGINT NOT NULL,

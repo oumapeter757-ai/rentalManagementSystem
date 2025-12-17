@@ -6,7 +6,8 @@ import com.peterscode.rentalmanagementsystem.dto.request.MaintenanceUpdateDto;
 import com.peterscode.rentalmanagementsystem.dto.response.ApiResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.MaintenanceResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.MaintenanceSummaryResponse;
-import com.peterscode.rentalmanagementsystem.service.MaintenanceService;
+
+import com.peterscode.rentalmanagementsystem.service.maintenance.MaintenanceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;

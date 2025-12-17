@@ -37,7 +37,7 @@ public class FileStorageUtil {
         // Generate unique filename
         String originalFilename = file.getOriginalFilename();
         String fileExtension = getFileExtension(originalFilename);
-        String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+        String uniqueFilename = UUID.randomUUID() + fileExtension;
 
         // Create directory if it doesn't exist
         Path uploadPath = Paths.get(uploadDir, subDirectory);

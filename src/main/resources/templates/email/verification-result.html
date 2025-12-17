@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -113,7 +113,7 @@
 
         if (seconds <= 0) {
             clearInterval(timer);
-            window.location.href = [[${frontendUrl}]] + '/auth/login';
+            window.location.href = /*[[${frontendUrl}]]*/ '/default-frontend-url' + '/auth/login';
         }
     }, 1000);
 </script>
