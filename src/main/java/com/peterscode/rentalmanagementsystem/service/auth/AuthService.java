@@ -20,6 +20,12 @@ public interface AuthService {
     JwtResponse createUserByAdmin(RegisterRequest request, Role role);
     JwtResponse registerTenant(RegisterRequest request);
     JwtResponse login(LoginRequest request, HttpServletRequest httpRequest);
+
+
+    boolean validateResetCode(String code);
+
+    // Update the initiatePasswordReset method for 6-digit code
     void initiatePasswordReset(String email);
+
     void resetPassword(ResetPasswordRequest request);
 }

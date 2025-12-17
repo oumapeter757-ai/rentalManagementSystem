@@ -1,8 +1,6 @@
 package com.peterscode.rentalmanagementsystem.controller;
 
-import com.peterscode.rentalmanagementsystem.dto.request.LoginRequest;
-import com.peterscode.rentalmanagementsystem.dto.request.RegisterRequest;
-import com.peterscode.rentalmanagementsystem.dto.request.ResetPasswordRequest;
+import com.peterscode.rentalmanagementsystem.dto.request.*;
 import com.peterscode.rentalmanagementsystem.dto.response.ApiResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.JwtResponse;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
@@ -122,14 +120,30 @@ public class AuthController {
     @Operation(summary = "Request password reset")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@RequestParam String email) {
         authService.initiatePasswordReset(email);
-        return ResponseEntity.ok(ApiResponse.success("Password reset instructions sent to your email", null));
+        return ResponseEntity.ok(ApiResponse.success("Password reset code sent to your email", null));
+    }
+
+    @PostMapping("/validate-reset-code")
+    @Operation(summary = "Validate password reset code")
+    public ResponseEntity<ApiResponse<Boolean>> validateResetCode(
+            @Valid @RequestBody ValidateCodeRequest request) {
+
+        boolean isValid = authService.validateResetCode(request.getCode());
+        return ResponseEntity.ok(ApiResponse.success(
+                "Reset code is valid",
+                isValid
+        ));
     }
 
     @PostMapping("/reset-password")
-    @Operation(summary = "Reset password with token")
+    @Operation(summary = "Reset password with verification code")
     public ResponseEntity<ApiResponse<Void>> resetPassword(
             @Valid @RequestBody ResetPasswordRequest request) {
+
         authService.resetPassword(request);
-        return ResponseEntity.ok(ApiResponse.success("Password reset successfully", null));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Password reset successfully",
+                null
+        ));
     }
 }

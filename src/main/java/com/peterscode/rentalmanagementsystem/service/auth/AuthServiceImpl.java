@@ -25,7 +25,6 @@ import com.peterscode.rentalmanagementsystem.util.NetworkUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -41,6 +40,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Random;
 
 @Slf4j
 @Service
@@ -55,13 +55,22 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
 
-
     private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     private final AppConfig appConfig;
 
     @Value("${app.frontend-url:http://localhost:5174}")
     private String frontendUrl;
+
+    // Add this constant for code expiration (5 minutes)
+    private static final int RESET_CODE_EXPIRY_MINUTES = 5;
+
+    // Add this method for generating 6-digit code
+    private String generateResetCode() {
+        Random random = new Random();
+        int code = 100000 + random.nextInt(900000); // 6-digit code (100000-999999)
+        return String.valueOf(code);
+    }
 
     @Override
     public boolean register(RegisterRequest request) {
@@ -77,6 +86,7 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
                 .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
                 .role(Role.TENANT)
                 .enabled(false) // Require email verification
                 .build();
@@ -175,6 +185,7 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
                 .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
                 .role(Role.ADMIN)
                 .enabled(true) // Admin doesn't need email verification
                 .build();
@@ -207,6 +218,7 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
                 .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
                 .role(role)
                 .enabled(true) // Admin-created users are automatically enabled
                 .build();
@@ -236,6 +248,7 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
                 .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
                 .role(Role.TENANT)
                 .enabled(false) // Require email verification
                 .build();
@@ -296,6 +309,96 @@ public class AuthServiceImpl implements AuthService {
         } catch (BadCredentialsException ex) {
             throw new AuthenticationFailedException("Invalid email or password");
         }
+    }
+
+    // Update the initiatePasswordReset method for 6-digit code
+    @Override
+    public void initiatePasswordReset(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new UserNotFoundException("User not found with email: " + email));
+
+        // Generate 6-digit code
+        String resetCode = generateResetCode();
+        LocalDateTime expiryDate = LocalDateTime.now().plusMinutes(RESET_CODE_EXPIRY_MINUTES);
+
+        // Invalidate any existing reset codes for this user
+        passwordResetTokenRepository.deleteByUser(user);
+
+        // Create password reset token with code
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .token(resetCode)  // Store the 6-digit code as token
+                .user(user)
+                .expiryDate(expiryDate)
+                .used(false)
+                .build();
+
+        passwordResetTokenRepository.save(resetToken);
+
+        // Log the code (for testing/debugging)
+        log.info("🔐 Password reset code for {}: {} (Expires in {} minutes)",
+                email, resetCode, RESET_CODE_EXPIRY_MINUTES);
+
+        // Send email with the 6-digit code
+        sendPasswordResetCodeEmail(user, resetCode);
+
+        log.info("Password reset code sent to: {}", email);
+    }
+
+    // Update the resetPassword method to accept code
+    @Override
+    public void resetPassword(ResetPasswordRequest request) {
+        log.info("Password reset attempt with token: {}", request.getToken().substring(0, Math.min(request.getToken().length(), 10)) + "...");
+
+        // Validate passwords match
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BadRequestException("Passwords do not match");
+        }
+
+        // Find token by code
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired reset code"));
+
+        if (resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Reset code has expired. Please request a new one.");
+        }
+
+        if (resetToken.isUsed()) {
+            throw new BadRequestException("Reset code has already been used");
+        }
+
+        User user = resetToken.getUser();
+
+        // Update password
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // Mark token as used
+        resetToken.setUsed(true);
+        resetToken.setUsedAt(LocalDateTime.now());
+        passwordResetTokenRepository.save(resetToken);
+
+        // Send password changed notification
+        sendPasswordChangedEmail(user);
+
+        log.info("Password reset successful for user: {}", user.getEmail());
+    }
+
+    // Add this method for validating reset code (without resetting password)
+    public boolean validateResetCode(String code) {
+        log.info("Validating reset code: {}", code);
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(code)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid reset code"));
+
+        if (resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Reset code has expired");
+        }
+
+        if (resetToken.isUsed()) {
+            throw new BadRequestException("Reset code has already been used");
+        }
+
+        return true;
     }
 
     // Helper methods
@@ -447,98 +550,31 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    @Override
-    public void initiatePasswordReset(String email) {
-        log.info("Password reset requested for: {}", email);
-
-        User user = userRepository.findByEmailIgnoreCase(email.trim())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
-
-        if (!user.isEnabled()) {
-            throw new BadRequestException("Account is not verified. Please verify your email first.");
-        }
-
-        // Delete any existing reset tokens
-
-        passwordResetTokenRepository.deleteByUser(user);
-
-        // Create new reset token
-        String token = UUID.randomUUID().toString();
-        PasswordResetToken resetToken = PasswordResetToken.builder()
-                .token(token)
-                .user(user)
-                .expiryDate(LocalDateTime.now().plusHours(2)) // 2 hours expiry
-                .build();
-        passwordResetTokenRepository.save(resetToken);
-
-        // Send password reset email
-        sendPasswordResetEmail(user, token);
-
-        log.info("Password reset token created for user: {}", user.getEmail());
-    }
-
-    @Override
-    public void resetPassword(ResetPasswordRequest request) {
-        log.info("Password reset attempt with token: {}", request.getToken().substring(0, 10) + "...");
-
-        // Validate passwords match
-        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
-            throw new BadRequestException("Passwords do not match");
-        }
-
-
-        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
-                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired reset token"));
-
-        if (resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("Reset token has expired");
-        }
-
-        if (resetToken.isUsed()) {
-            throw new BadRequestException("Reset token has already been used");
-        }
-
-        User user = resetToken.getUser();
-
-        // Update password
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        userRepository.save(user);
-
-        // Mark token as used
-        resetToken.setUsed(true);
-        resetToken.setUsedAt(LocalDateTime.now());
-        passwordResetTokenRepository.save(resetToken);
-
-        // Send password changed notification
-        sendPasswordChangedEmail(user);
-
-        log.info("Password reset successful for user: {}", user.getEmail());
-    }
-
-    // Add this helper method
-    private void sendPasswordResetEmail(User user, String token) {
+    // Add this method for sending password reset code email
+    private void sendPasswordResetCodeEmail(User user, String resetCode) {
         try {
-            String resetLink = frontendUrl + "/auth/reset-password?token=" + token;
-            String subject = "Reset Your Password - Rental Management System";
+            String subject = "Your Password Reset Code - Rental Management System";
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
-            variables.put("resetLink", resetLink);
-            variables.put("expiryHours", 2);
+            variables.put("resetCode", resetCode);
+            variables.put("expiryMinutes", RESET_CODE_EXPIRY_MINUTES);
+            variables.put("currentYear", LocalDateTime.now().getYear());
 
             EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
                     .subject(subject)
-                    .templateName("password-reset")
+                    .templateName("password-reset-code")
                     .variables(variables)
                     .html(true)
                     .build();
 
             emailService.sendEmailAsync(emailRequest);
-            log.info("Password reset email sent to: {}", user.getEmail());
+            log.info("Password reset code email sent to: {}", user.getEmail());
 
         } catch (Exception e) {
-            log.error("Failed to send password reset email to {}: {}", user.getEmail(), e.getMessage());
+            log.error("Failed to send password reset code email to {}: {}",
+                    user.getEmail(), e.getMessage());
         }
     }
 

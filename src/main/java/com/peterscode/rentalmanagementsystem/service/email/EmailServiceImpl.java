@@ -35,13 +35,14 @@ public class EmailServiceImpl implements EmailService {
     private final EmailLogRepository emailLogRepository;
     private final JavaMailSender javaMailSender;
 
-    @Value("${spring.mail.username:noreply@rentalmanagementsystem.com}")
+    @Value("${spring.mail.username}")
     private String fromEmail;
 
-    @Value("${app.verification-url:http://localhost:8080/api/auth}")
-    private String verificationBaseUrl;
+    @Value("${app.frontend-url:http://localhost:5173}")
+    private String frontendUrl;
 
-
+    @Value("${app.backend-url:http://localhost:8080}")
+    private String backendUrl;
 
     @Override
     @Transactional
@@ -51,26 +52,42 @@ public class EmailServiceImpl implements EmailService {
         EmailLog emailLog = createEmailLog(emailRequest);
 
         try {
+            // Generate HTML content based on template
+            String htmlContent = generateHtmlContent(emailRequest);
+            emailRequest.setBody(htmlContent); // Update request with generated content
+
             // Check if email sending is configured
             if (isEmailConfigured()) {
                 // Create and send real email
                 sendRealEmail(emailRequest);
                 emailLog.setStatus(EmailStatus.SENT);
                 log.info("✅ Email sent successfully to: {}", emailRequest.getRecipient());
+
+                // Log password reset code if applicable
+                if (emailRequest.getTemplateName() != null &&
+                        emailRequest.getTemplateName().contains("password-reset-code")) {
+                    Map<String, Object> variables = emailRequest.getVariables();
+                    if (variables != null && variables.containsKey("resetCode")) {
+                        String resetCode = (String) variables.get("resetCode");
+                        log.info("🔐 Password Reset Code for {}: {}", emailRequest.getRecipient(), resetCode);
+                        log.info("⏰ Code expires in: {} minutes", variables.getOrDefault("expiryMinutes", 5));
+                    }
+                }
             } else {
                 // Log email details only (development mode)
                 logEmailDetails(emailRequest);
                 emailLog.setStatus(EmailStatus.SENT);
                 log.info("📧 Email logged (development mode) to: {}", emailRequest.getRecipient());
 
-                // For verification emails, show the verification link in logs
+                // For password reset code emails, show the code in logs
                 if (emailRequest.getTemplateName() != null &&
-                        emailRequest.getTemplateName().contains("verification")) {
-                    logVerificationLink(emailRequest);
+                        emailRequest.getTemplateName().contains("password-reset-code")) {
+                    logPasswordResetCodeInfo(emailRequest);
                 }
             }
 
             emailLog.setSentAt(LocalDateTime.now());
+            emailLog.setBody(htmlContent);
 
         } catch (Exception e) {
             handleEmailError(emailLog, e);
@@ -296,9 +313,7 @@ public class EmailServiceImpl implements EmailService {
         helper.setTo(emailRequest.getRecipient());
         helper.setSubject(emailRequest.getSubject());
 
-        // Generate HTML content
-        String htmlContent = generateHtmlContent(emailRequest);
-        helper.setText(htmlContent, true);
+        helper.setText(emailRequest.getBody(), true);
 
         javaMailSender.send(message);
     }
@@ -309,49 +324,231 @@ public class EmailServiceImpl implements EmailService {
                 : new HashMap<>();
 
         String firstName = (String) variables.getOrDefault("firstName", "User");
-        String verificationLink = (String) variables.getOrDefault("verificationLink", "");
-        Integer expiryHours = (Integer) variables.getOrDefault("expiryHours", 24);
         int currentYear = LocalDateTime.now().getYear();
 
         // Check template name safely
         String templateName = emailRequest.getTemplateName();
 
         if (templateName != null && templateName.contains("verification")) {
-            return """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; }
-                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                        .button { 
-                            background-color: #4F46E5; 
-                            color: white; 
-                            padding: 12px 24px; 
-                            text-decoration: none; 
-                            border-radius: 4px; 
-                            display: inline-block; 
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h2>Verify Your Email</h2>
-                        <p>Hello %s,</p>
-                        <p>Please verify your email by clicking the button below:</p>
-                        <a href="%s" class="button">Verify Email</a>
-                        <p>This link expires in %d hours.</p>
-                        <p>If you didn't create an account, please ignore this email.</p>
-                        <p>© %d Rental Management System</p>
-                    </div>
-                </body>
-                </html>
-                """.formatted(firstName, verificationLink, expiryHours, currentYear);
+            String verificationLink = (String) variables.getOrDefault("verificationLink", "");
+            Integer expiryHours = (Integer) variables.getOrDefault("expiryHours", 24);
+            return generateVerificationEmailHtml(firstName, verificationLink, expiryHours, currentYear);
+        }
+
+        if (templateName != null && templateName.contains("password-reset")) {
+            String token = (String) variables.getOrDefault("token", "");
+            Integer expiryHours = (Integer) variables.getOrDefault("expiryHours", 24);
+            String frontendResetLink = frontendUrl + "/auth/reset-password?token=" + token;
+            String directApiLink = backendUrl + "/api/auth/reset-password?token=" + token;
+
+            return generatePasswordResetEmailHtml(firstName, token, frontendResetLink, directApiLink, expiryHours, currentYear);
+        }
+
+        if (templateName != null && templateName.contains("password-reset-code")) {
+            String resetCode = (String) variables.getOrDefault("resetCode", "");
+            Integer expiryMinutes = (Integer) variables.getOrDefault("expiryMinutes", 5);
+
+            return generatePasswordResetCodeEmailHtml(firstName, resetCode, expiryMinutes, currentYear);
         }
 
         // Return custom body or default
         return emailRequest.getBody() != null ? emailRequest.getBody() : "";
+    }
+
+    private String generateVerificationEmailHtml(String firstName, String verificationLink, int expiryHours, int currentYear) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .button { 
+                        background-color: #4F46E5; 
+                        color: white; 
+                        padding: 12px 24px; 
+                        text-decoration: none; 
+                        border-radius: 4px; 
+                        display: inline-block; 
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Verify Your Email</h2>
+                    <p>Hello %s,</p>
+                    <p>Please verify your email by clicking the button below:</p>
+                    <a href="%s" class="button">Verify Email</a>
+                    <p>This link expires in %d hours.</p>
+                    <p>If you didn't create an account, please ignore this email.</p>
+                    <p>© %d Rental Management System</p>
+                </div>
+            </body>
+            </html>
+            """, firstName, verificationLink, expiryHours, currentYear);
+    }
+
+    private String generatePasswordResetEmailHtml(String firstName, String token,
+                                                  String frontendResetLink, String directApiLink,
+                                                  int expiryHours, int currentYear) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Reset Your Password</title>
+                <style>
+                    body {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        margin: 0;
+                        padding: 20px;
+                        background-color: #f5f7fa;
+                    }
+                    .container {
+                        max-width: 600px;
+                        margin: 0 auto;
+                        background-color: white;
+                        border-radius: 12px;
+                        padding: 30px;
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                    }
+                    .button {
+                        display: inline-block;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        text-decoration: none;
+                        padding: 14px 32px;
+                        border-radius: 8px;
+                        font-weight: 600;
+                        font-size: 16px;
+                        margin: 20px 0;
+                        text-align: center;
+                    }
+                    .token-box {
+                        background-color: #f8f9fa;
+                        border: 2px dashed #dee2e6;
+                        border-radius: 8px;
+                        padding: 15px;
+                        margin: 20px 0;
+                        font-family: 'Courier New', monospace;
+                        font-size: 14px;
+                        word-break: break-all;
+                    }
+                    .footer {
+                        margin-top: 30px;
+                        padding-top: 20px;
+                        border-top: 1px solid #eee;
+                        font-size: 12px;
+                        color: #666;
+                        text-align: center;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Reset Your Password</h2>
+                    <p>Hello <strong>%s</strong>,</p>
+                    <p>We received a request to reset your password for your Rental Management System account.</p>
+                    
+                    <div style="text-align: center; margin: 25px 0;">
+                        <a href="%s" class="button">Click Here to Reset Password</a>
+                        <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                            (Click the button above to reset your password)
+                        </p>
+                    </div>
+                    
+                    <div class="token-box">
+                        <strong>Your Reset Token:</strong><br>
+                        <code>%s</code>
+                    </div>
+                    
+                    <p><strong>Alternative Method:</strong> If the button doesn't work, you can:</p>
+                    <ol>
+                        <li>Go to: %s/auth/reset-password</li>
+                        <li>Enter this token: <code>%s</code></li>
+                    </ol>
+                    
+                    <p><strong>Or use this direct API link:</strong></p>
+                    <div class="token-box">
+                        <code>%s</code>
+                    </div>
+                    
+                    <p><strong>Important:</strong></p>
+                    <ul>
+                        <li>This token expires in <strong>%d hours</strong></li>
+                        <li>Never share this token with anyone</li>
+                        <li>If you didn't request this, please ignore this email</li>
+                    </ul>
+                    
+                    <div class="footer">
+                        <p>© %d Rental Management System</p>
+                        <p>This is an automated message. Please do not reply.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """, firstName, frontendResetLink, token, frontendUrl, token, directApiLink, expiryHours, currentYear);
+    }
+
+    private String generatePasswordResetCodeEmailHtml(String firstName, String resetCode,
+                                                      int expiryMinutes, int currentYear) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
+                    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; padding: 30px; }
+                    .code { font-size: 48px; font-weight: bold; letter-spacing: 10px; color: #4F46E5; margin: 20px 0; text-align: center; }
+                    .expiry { color: #666; font-size: 14px; margin: 10px 0; text-align: center; }
+                    .warning { background: #fff3cd; border: 1px solid #ffecb5; padding: 15px; margin: 20px 0; border-radius: 5px; }
+                    .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center; }
+                    .header { text-align: center; margin-bottom: 20px; }
+                    .header h2 { color: #4F46E5; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>Password Reset Code</h2>
+                    </div>
+                    <p>Hello <strong>%s</strong>,</p>
+                    <p>You requested to reset your password. Use the verification code below to complete the reset process.</p>
+                    
+                    <div class="code">%s</div>
+                    <div class="expiry">⏰ This code expires in: %d minutes</div>
+                    
+                    <div class="warning">
+                        <strong>Security Notice:</strong>
+                        <ul>
+                            <li>Do not share this code with anyone</li>
+                            <li>This code expires in %d minutes</li>
+                            <li>Use it immediately on the password reset page</li>
+                            <li>If you didn't request this, please ignore this email</li>
+                        </ul>
+                    </div>
+                    
+                    <p><strong>How to use:</strong></p>
+                    <ol>
+                        <li>Go to: %s/auth/reset-password</li>
+                        <li>Enter the 6-digit code: <strong>%s</strong></li>
+                        <li>Create your new password</li>
+                    </ol>
+                    
+                    <div class="footer">
+                        <p>© %d Rental Management System</p>
+                        <p>This is an automated message. Please do not reply.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """, firstName, resetCode, expiryMinutes, expiryMinutes, frontendUrl, resetCode, currentYear);
     }
 
     private void logEmailDetails(EmailRequest emailRequest) {
@@ -369,18 +566,20 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
-    private void logVerificationLink(EmailRequest emailRequest) {
-        if (emailRequest.getVariables() != null && emailRequest.getVariables().containsKey("verificationLink")) {
-            String verificationLink = (String) emailRequest.getVariables().get("verificationLink");
-            log.info("   🔗 Verification Link: {}", verificationLink);
+    private void logPasswordResetCodeInfo(EmailRequest emailRequest) {
+        Map<String, Object> variables = emailRequest.getVariables();
+        if (variables != null && variables.containsKey("resetCode")) {
+            String resetCode = (String) variables.get("resetCode");
+            Integer expiryMinutes = (Integer) variables.getOrDefault("expiryMinutes", 5);
 
-            // Extract token for manual verification
-            String token = extractTokenFromVerificationLink(verificationLink);
-            if (token != null) {
-                String manualVerifyUrl = verificationBaseUrl + "/verify-email/" + token;
-                log.info("   🛠️  Manual Verification URL: {}", manualVerifyUrl);
-                log.info("   💡 To manually verify, run: curl -X POST {}", manualVerifyUrl);
-            }
+            log.info("   🔐 Password Reset Code: {}", resetCode);
+            log.info("   ⏰ Expires in: {} minutes", expiryMinutes);
+            log.info("   🌐 Reset URL: {}/auth/reset-password", frontendUrl);
+
+            log.info("   💡 To test with curl:");
+            log.info("       curl -X POST '{}/api/auth/reset-password' \\", backendUrl);
+            log.info("            -H 'Content-Type: application/json' \\");
+            log.info("            -d '{\"token\": \"%s\", \"newPassword\": \"NewPassword123!\", \"confirmPassword\": \"NewPassword123!\"}'", resetCode);
         }
     }
 
@@ -420,46 +619,38 @@ public class EmailServiceImpl implements EmailService {
                 .build();
     }
 
-    private String extractTokenFromVerificationLink(String verificationLink) {
-        if (verificationLink == null) return null;
-
-        if (verificationLink.contains("token=")) {
-            String tokenWithParams = verificationLink.substring(verificationLink.indexOf("token=") + 6);
-            return tokenWithParams.split("&")[0];
-        }
-
-        if (verificationLink.contains("/verify-email/")) {
-            return verificationLink.substring(verificationLink.lastIndexOf("/") + 1);
-        }
-
-        return null;
-    }
-
     private Map<String, Object> extractVariablesFromBody(String body) {
         Map<String, Object> variables = new HashMap<>();
         if (body == null || body.isEmpty()) return variables;
 
-        // Extract verification link from HTML
-        if (body.contains("href=\"")) {
-            int start = body.indexOf("href=\"") + 6;
-            int end = body.indexOf("\"", start);
-            if (start > 5 && end > start) {
-                String link = body.substring(start, end);
-                if (link.contains("verify-email")) {
-                    variables.put("verificationLink", link);
-                    String token = extractTokenFromVerificationLink(link);
-                    if (token != null) {
-                        variables.put("token", token);
-                    }
+        // Extract reset code from HTML (for 6-digit codes)
+        if (body.contains("class=\"code\"")) {
+            int start = body.indexOf("class=\"code\"");
+            if (start > 0) {
+                start = body.indexOf(">", start) + 1;
+                int end = body.indexOf("</div>", start);
+                if (start > 0 && end > start) {
+                    String code = body.substring(start, end).trim();
+                    variables.put("resetCode", code);
                 }
             }
         }
 
-        // Extract first name
-        if (body.contains("Hello ")) {
-            int start = body.indexOf("Hello ") + 6;
-            int end = body.indexOf(",", start);
+        // Extract token from HTML (for UUID tokens)
+        if (body.contains("Your Reset Token:")) {
+            int start = body.indexOf("<code>") + 6;
+            int end = body.indexOf("</code>", start);
             if (start > 5 && end > start) {
+                String token = body.substring(start, end).trim();
+                variables.put("token", token);
+            }
+        }
+
+        // Extract first name
+        if (body.contains("Hello <strong>")) {
+            int start = body.indexOf("Hello <strong>") + 14;
+            int end = body.indexOf("</strong>", start);
+            if (start > 13 && end > start) {
                 String firstName = body.substring(start, end).trim();
                 variables.put("firstName", firstName);
             }
