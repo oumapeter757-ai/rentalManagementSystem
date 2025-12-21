@@ -1,7 +1,6 @@
 package com.peterscode.rentalmanagementsystem.security;
 
 import com.peterscode.rentalmanagementsystem.model.user.User;
-import lombok.Getter;
 import lombok.NonNull;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -10,14 +9,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.Collection;
 import java.util.List;
 
-@Getter
-public class SecurityUser implements UserDetails {
-
-    private final User user;
-
-    public SecurityUser(User user) {
-        this.user = user;
-    }
+public record SecurityUser(User user) implements UserDetails {
 
     @Override
     @NonNull

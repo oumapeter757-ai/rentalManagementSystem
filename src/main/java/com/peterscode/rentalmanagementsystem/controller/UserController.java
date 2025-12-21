@@ -1,4 +1,4 @@
-// src/main/java/com/peterscode/rentalmanagementsystem/controller/UserController.java
+
 package com.peterscode.rentalmanagementsystem.controller;
 
 import com.peterscode.rentalmanagementsystem.dto.response.ApiResponse;
@@ -47,7 +47,7 @@ public class UserController {
     }
 
     @GetMapping("/landlords")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
     @Operation(summary = "Get all landlords (Admin only)")
     public ResponseEntity<ApiResponse<List<User>>> getLandlords() {
         List<User> landlords = userService.getUsersByRole(Role.LANDLORD);

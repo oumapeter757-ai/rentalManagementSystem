@@ -55,20 +55,20 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-// Public endpoints
+
                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                                 .requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/public/**").permitAll()
                                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
-// User management endpoints (Admin only)
+
                                 .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.PATCH, "/api/users/**").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasRole("ADMIN")
 
-// Auth endpoints (Public)
+
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register/admin").permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register/tenant").permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register/landlord").permitAll()

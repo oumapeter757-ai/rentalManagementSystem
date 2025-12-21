@@ -31,7 +31,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
         PropertyImage savedImage = propertyImageRepository.save(image);
 
-        // If this is the first image, set it as main image
+
         if (propertyImageRepository.countByPropertyId(propertyId) == 1) {
             property.setMainImageUrl(imageUrl);
             propertyRepository.save(property);
@@ -110,7 +110,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
         return propertyImageRepository.countByPropertyId(propertyId);
     }
 
-    // Helper method to map entity to response DTO
+
     private PropertyImageResponse mapToResponse(PropertyImage image) {
         return PropertyImageResponse.builder()
                 .id(image.getId())

@@ -29,7 +29,7 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    // ==================== Payment Creation ====================
+
 
     @PostMapping
     @PreAuthorize("hasAnyRole('TENANT', 'ADMIN')")
@@ -59,7 +59,7 @@ public class PaymentController {
         );
     }
 
-    // ==================== Payment Retrieval ====================
+
 
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")

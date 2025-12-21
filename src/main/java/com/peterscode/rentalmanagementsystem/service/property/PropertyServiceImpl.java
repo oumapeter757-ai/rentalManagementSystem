@@ -40,8 +40,8 @@ public class PropertyServiceImpl implements PropertyService {
 
         if (currentUser.getRole() == Role.ADMIN && request.getOwnerId() != null) {
             owner = getUserById(request.getOwnerId());
-            if (owner.getRole() != Role.LANDLORD) {
-                throw new RuntimeException("Owner must be a LANDLORD");
+            if (owner.getRole() != Role.LANDLORD && owner.getRole() != Role.ADMIN) {
+                throw new RuntimeException("Owner must be a LANDLORD or ADMIN");
             }
         }
 

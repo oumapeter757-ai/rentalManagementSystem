@@ -1,5 +1,7 @@
 package com.peterscode.rentalmanagementsystem.model.user;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
 import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenanceRequest;
 import com.peterscode.rentalmanagementsystem.model.property.Property;
@@ -53,9 +55,11 @@ public class User {
     private Instant createdAt = Instant.now();
 
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Property> properties;
 
     @OneToMany(mappedBy = "tenant", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<RentalApplication> rentalApplications;
 
 

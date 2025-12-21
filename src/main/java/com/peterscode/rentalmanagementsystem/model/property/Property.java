@@ -1,5 +1,7 @@
 package com.peterscode.rentalmanagementsystem.model.property;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import jakarta.persistence.*;
@@ -74,6 +76,7 @@ public class Property {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
+    @JsonIgnore
     private User owner;
 
     @CreationTimestamp
@@ -85,6 +88,7 @@ public class Property {
 
 
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<RentalApplication> applications;
 
 

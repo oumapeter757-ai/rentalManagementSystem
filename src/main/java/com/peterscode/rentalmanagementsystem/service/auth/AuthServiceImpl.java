@@ -287,7 +287,7 @@ public class AuthServiceImpl implements AuthService {
             );
 
             SecurityUser securityUser = (SecurityUser) authentication.getPrincipal();
-            User user = securityUser.getUser();
+            User user = securityUser.user();
 
             if (!user.isEnabled()) {
                 throw new AccountDisabledException("Account is not verified. Please verify your email first.");

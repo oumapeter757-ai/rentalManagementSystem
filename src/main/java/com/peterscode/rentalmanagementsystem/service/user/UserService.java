@@ -1,4 +1,4 @@
-// src/main/java/com/peterscode/rentalmanagementsystem/service/user/UserService.java
+
 package com.peterscode.rentalmanagementsystem.service.user;
 
 import com.peterscode.rentalmanagementsystem.model.user.Role;

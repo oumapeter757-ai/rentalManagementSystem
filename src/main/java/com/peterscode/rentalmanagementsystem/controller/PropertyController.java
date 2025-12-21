@@ -1,6 +1,7 @@
 package com.peterscode.rentalmanagementsystem.controller;
 
 import com.peterscode.rentalmanagementsystem.dto.request.PropertyRequest;
+import com.peterscode.rentalmanagementsystem.dto.response.ApiResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PropertyResponse;
 import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.service.property.PropertyService;
@@ -76,11 +77,11 @@ public class PropertyController {
         return ResponseEntity.ok(property);
     }
 
-    // DELETE PROPERTY - Uses authenticated user from security context
+
     @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
     @DeleteMapping("/{propertyId}")
-    public ResponseEntity<String> deleteProperty(@PathVariable Long propertyId) {
+    public ResponseEntity<ApiResponse<Void>> deleteProperty(@PathVariable Long propertyId) {
         propertyService.deleteProperty(propertyId);
-        return ResponseEntity.ok("Property deleted successfully");
+        return ResponseEntity.ok(ApiResponse.success("Property deleted successfully", null));
     }
 }
