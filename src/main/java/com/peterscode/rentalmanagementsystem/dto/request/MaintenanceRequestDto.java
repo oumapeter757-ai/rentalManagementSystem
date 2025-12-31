@@ -13,7 +13,7 @@ import java.util.List;
 
 @Data
 public class MaintenanceRequestDto {
-
+    private Long propertyId;
     @NotNull(message = "Category is required")
     private MaintenanceCategory category;
 

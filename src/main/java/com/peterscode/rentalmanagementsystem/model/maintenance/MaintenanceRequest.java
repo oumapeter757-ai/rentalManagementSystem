@@ -1,6 +1,6 @@
 package com.peterscode.rentalmanagementsystem.model.maintenance;
 
-import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenanceImage;
+import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -8,6 +8,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
 @Entity
 @Getter
 @Setter
@@ -24,6 +25,10 @@ public class MaintenanceRequest {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
     private User tenant;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "property_id", nullable = false)
+    private Property property;
 
     @Enumerated(EnumType.STRING)
     private MaintenanceCategory category;
@@ -54,4 +59,3 @@ public class MaintenanceRequest {
         }
     }
 }
-

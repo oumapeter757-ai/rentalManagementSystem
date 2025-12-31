@@ -39,6 +39,12 @@ public class MaintenanceResponse {
     private String tenantEmail;
     private String tenantPhone;
 
+    // Property info (ADDED)
+    private Long propertyId;
+    private String propertyTitle;
+    private String propertyAddress;
+    private String propertyType;
+
     // Assigned staff info
     private Long assignedToId;
     private String assignedToName;

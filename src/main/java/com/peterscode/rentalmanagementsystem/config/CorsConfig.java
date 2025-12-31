@@ -19,9 +19,6 @@ public class CorsConfig {
         // Your frontend origins - ADD BOTH HTTP AND HTTPS
         configuration.setAllowedOrigins(Arrays.asList(
 
-                "https://01c4da3f-8a98-4138-a15a-66beaeaca094.lovableproject.com",
-                "http://01c4da3f-8a98-4138-a15a-66beaeaca094.lovableproject.com",
-
 
                 "http://localhost:5173",
                 "http://localhost:5174",

@@ -4,6 +4,7 @@ import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenanceCatego
 import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenancePriority;
 import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenanceRequest;
 import com.peterscode.rentalmanagementsystem.model.maintenance.MaintenanceStatus;
+import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -47,5 +48,28 @@ public interface MaintenanceRequestRepository extends JpaRepository<MaintenanceR
 
     Optional<MaintenanceRequest> findByIdAndTenant(Long id, User tenant);
 
+    List<MaintenanceRequest> findByPropertyOrderByRequestDateDesc(Property property);
+
+    List<MaintenanceRequest> findByPropertyAndStatusOrderByRequestDateDesc(Property property, MaintenanceStatus status);
+
     boolean existsByIdAndTenant(Long id, User tenant);
+
+    // NEW METHODS FOR LANDLORD PROPERTY-BASED QUERIES
+    @Query("SELECT mr FROM MaintenanceRequest mr WHERE mr.property.owner = :owner ORDER BY mr.requestDate DESC")
+    List<MaintenanceRequest> findByPropertyOwnerOrderByRequestDateDesc(@Param("owner") User owner);
+
+    @Query("SELECT mr FROM MaintenanceRequest mr WHERE mr.property.owner = :owner AND mr.status = :status ORDER BY mr.requestDate DESC")
+    List<MaintenanceRequest> findByPropertyOwnerAndStatusOrderByRequestDateDesc(@Param("owner") User owner, @Param("status") MaintenanceStatus status);
+
+    @Query("SELECT mr FROM MaintenanceRequest mr WHERE mr.property.owner = :owner AND mr.category = :category ORDER BY mr.requestDate DESC")
+    List<MaintenanceRequest> findByPropertyOwnerAndCategoryOrderByRequestDateDesc(@Param("owner") User owner, @Param("category") MaintenanceCategory category);
+
+    @Query("SELECT mr FROM MaintenanceRequest mr WHERE mr.property.owner = :owner AND mr.priority = :priority ORDER BY mr.requestDate DESC")
+    List<MaintenanceRequest> findByPropertyOwnerAndPriorityOrderByRequestDateDesc(@Param("owner") User owner, @Param("priority") MaintenancePriority priority);
+
+    @Query("SELECT mr FROM MaintenanceRequest mr WHERE mr.property.owner = :owner AND mr.status IN :openStatuses ORDER BY mr.requestDate DESC")
+    List<MaintenanceRequest> findOpenRequestsByPropertyOwner(@Param("owner") User owner, @Param("openStatuses") List<MaintenanceStatus> openStatuses);
+
+    @Query("SELECT COUNT(mr) FROM MaintenanceRequest mr WHERE mr.property.owner = :owner AND mr.status IN :openStatuses")
+    Long countOpenRequestsByPropertyOwner(@Param("owner") User owner, @Param("openStatuses") List<MaintenanceStatus> openStatuses);
 }

@@ -51,7 +51,7 @@ public class FileController {
                 Files.createDirectories(uploadPath);
             }
 
-            // Generate unique filename
+
             String originalFilename = file.getOriginalFilename();
             String fileExtension = "";
             if (originalFilename != null && originalFilename.contains(".")) {
@@ -61,10 +61,10 @@ public class FileController {
             String uniqueFilename = UUID.randomUUID() + fileExtension;
             Path filePath = uploadPath.resolve(uniqueFilename);
 
-            // Save file
+
             Files.copy(file.getInputStream(), filePath);
 
-            // Prepare response
+
             Map<String, String> response = new HashMap<>();
             response.put("filename", uniqueFilename);
             response.put("originalFilename", originalFilename);

@@ -7,12 +7,12 @@ import com.peterscode.rentalmanagementsystem.dto.response.MaintenanceSummaryResp
 import com.peterscode.rentalmanagementsystem.exception.BadRequestException;
 import com.peterscode.rentalmanagementsystem.exception.ResourceNotFoundException;
 import com.peterscode.rentalmanagementsystem.model.maintenance.*;
+import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.MaintenanceImageRepository;
 import com.peterscode.rentalmanagementsystem.repository.MaintenanceRequestRepository;
+import com.peterscode.rentalmanagementsystem.repository.PropertyRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
-
-
 import com.peterscode.rentalmanagementsystem.util.FileStorageUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +35,7 @@ public class MaintenanceServiceImpl implements MaintenanceService {
     private final MaintenanceRequestRepository maintenanceRequestRepository;
     private final MaintenanceImageRepository maintenanceImageRepository;
     private final UserRepository userRepository;
+    private final PropertyRepository propertyRepository;
     private final FileStorageUtil fileStorageUtil;
 
     private final List<MaintenanceStatus> OPEN_STATUSES = Arrays.asList(
@@ -45,7 +46,7 @@ public class MaintenanceServiceImpl implements MaintenanceService {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final List<String> ALLOWED_FILE_TYPES = Arrays.asList(
-            "image/jpeg", "image/png", "image/gif", "image/webp","image/heic", "image/heif"
+            "image/jpeg", "image/png", "image/gif", "image/webp", "image/heic", "image/heif"
     );
 
     @Override
@@ -56,8 +57,12 @@ public class MaintenanceServiceImpl implements MaintenanceService {
 
         validateTenantRole(tenant);
 
+        Property property = propertyRepository.findById(requestDto.getPropertyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found with id: " + requestDto.getPropertyId()));
+
         MaintenanceRequest request = MaintenanceRequest.builder()
                 .tenant(tenant)
+                .property(property)
                 .category(requestDto.getCategory())
                 .title(requestDto.getTitle())
                 .description(requestDto.getDescription())
@@ -74,7 +79,8 @@ public class MaintenanceServiceImpl implements MaintenanceService {
             maintenanceRequestRepository.save(request);
         }
 
-        log.info("Maintenance request created: {} by tenant: {}", request.getId(), tenantEmail);
+        log.info("Maintenance request created: {} for property: {} by tenant: {}",
+                request.getId(), property.getId(), tenantEmail);
         return mapToResponse(request);
     }
 
@@ -135,6 +141,7 @@ public class MaintenanceServiceImpl implements MaintenanceService {
 
         return images;
     }
+
     private void validateImageFile(MultipartFile file) {
         if (file.isEmpty()) {
             throw new BadRequestException("File is empty");
@@ -186,12 +193,8 @@ public class MaintenanceServiceImpl implements MaintenanceService {
         if (user.getRole().name().contains("ADMIN")) {
             return maintenanceRequestRepository.findAllByOrderByRequestDateDesc();
         } else if (user.getRole().name().contains("LANDLORD")) {
-            // Landlord can see requests for their properties
-            // This needs property relationship implementation
-            // For now, return empty or implement property-based filtering
-            return new ArrayList<>();
+            return maintenanceRequestRepository.findByPropertyOwnerOrderByRequestDateDesc(user);
         } else {
-            // Tenant can only see their own requests
             return maintenanceRequestRepository.findByTenantOrderByRequestDateDesc(user);
         }
     }
@@ -222,8 +225,10 @@ public class MaintenanceServiceImpl implements MaintenanceService {
     }
 
     private List<MaintenanceRequest> getRequestsByStatusAndRole(MaintenanceStatus status, User user) {
-        if (user.getRole().name().contains("ADMIN") || user.getRole().name().contains("LANDLORD")) {
+        if (user.getRole().name().contains("ADMIN")) {
             return maintenanceRequestRepository.findByStatusOrderByRequestDateDesc(status);
+        } else if (user.getRole().name().contains("LANDLORD")) {
+            return maintenanceRequestRepository.findByPropertyOwnerAndStatusOrderByRequestDateDesc(user, status);
         } else {
             return maintenanceRequestRepository.findByTenantAndStatusOrderByRequestDateDesc(user, status);
         }
@@ -251,8 +256,10 @@ public class MaintenanceServiceImpl implements MaintenanceService {
     }
 
     private List<MaintenanceRequest> getRequestsByCategoryAndRole(MaintenanceCategory category, User user) {
-        if (user.getRole().name().contains("ADMIN") || user.getRole().name().contains("LANDLORD")) {
+        if (user.getRole().name().contains("ADMIN")) {
             return maintenanceRequestRepository.findByCategoryOrderByRequestDateDesc(category);
+        } else if (user.getRole().name().contains("LANDLORD")) {
+            return maintenanceRequestRepository.findByPropertyOwnerAndCategoryOrderByRequestDateDesc(user, category);
         } else {
             return maintenanceRequestRepository.findByTenantAndCategoryOrderByRequestDateDesc(user, category);
         }
@@ -280,8 +287,10 @@ public class MaintenanceServiceImpl implements MaintenanceService {
     }
 
     private List<MaintenanceRequest> getRequestsByPriorityAndRole(MaintenancePriority priority, User user) {
-        if (user.getRole().name().contains("ADMIN") || user.getRole().name().contains("LANDLORD")) {
+        if (user.getRole().name().contains("ADMIN")) {
             return maintenanceRequestRepository.findByPriorityOrderByRequestDateDesc(priority);
+        } else if (user.getRole().name().contains("LANDLORD")) {
+            return maintenanceRequestRepository.findByPropertyOwnerAndPriorityOrderByRequestDateDesc(user, priority);
         } else {
             return maintenanceRequestRepository.findByTenantAndPriorityOrderByRequestDateDesc(user, priority);
         }
@@ -308,8 +317,10 @@ public class MaintenanceServiceImpl implements MaintenanceService {
     }
 
     private List<MaintenanceRequest> getOpenRequestsBasedOnRole(User user) {
-        if (user.getRole().name().contains("ADMIN") || user.getRole().name().contains("LANDLORD")) {
+        if (user.getRole().name().contains("ADMIN")) {
             return maintenanceRequestRepository.findOpenRequests(OPEN_STATUSES);
+        } else if (user.getRole().name().contains("LANDLORD")) {
+            return maintenanceRequestRepository.findOpenRequestsByPropertyOwner(user, OPEN_STATUSES);
         } else {
             return maintenanceRequestRepository.findOpenRequestsByTenant(user, OPEN_STATUSES);
         }
@@ -350,8 +361,6 @@ public class MaintenanceServiceImpl implements MaintenanceService {
         if (updateDto.getStatus() != null) {
             request.setStatus(updateDto.getStatus());
         }
-
-
     }
 
     @Override
@@ -396,12 +405,9 @@ public class MaintenanceServiceImpl implements MaintenanceService {
             throw new AccessDeniedException("Only admins or landlords can assign requests");
         }
 
-        // Check if staff has appropriate role (e.g., STAFF, MAINTENANCE)
         if (!staff.getRole().name().contains("STAFF") && !staff.getRole().name().contains("MAINTENANCE")) {
             throw new BadRequestException("Cannot assign to user without staff/maintenance role");
         }
-
-
 
         String assignmentNote = String.format("Assigned to %s (%s) by %s",
                 staff.getFirstName() + " " + staff.getLastName(), staff.getEmail(), callerEmail);
@@ -451,12 +457,10 @@ public class MaintenanceServiceImpl implements MaintenanceService {
             throw new BadRequestException("Can only delete requests with PENDING status");
         }
 
-        // Delete associated images from storage
         deleteRequestImages(request);
 
         maintenanceRequestRepository.delete(request);
 
-        // Delete maintenance directory
         fileStorageUtil.deleteMaintenanceDirectory(id);
 
         log.info("Maintenance request {} deleted by {}", id, callerEmail);
@@ -480,21 +484,17 @@ public class MaintenanceServiceImpl implements MaintenanceService {
         MaintenanceImage image = maintenanceImageRepository.findById(imageId)
                 .orElseThrow(() -> new ResourceNotFoundException("Image not found"));
 
-        // Verify image belongs to the request
         if (!image.getMaintenanceRequest().getId().equals(requestId)) {
             throw new BadRequestException("Image does not belong to this maintenance request");
         }
 
-        // Delete file from storage
         boolean deleted = fileStorageUtil.deleteFile(image.getImageUrl());
         if (deleted && image.getThumbnailUrl() != null) {
             fileStorageUtil.deleteFile(image.getThumbnailUrl());
         }
 
-        // Delete from database
         maintenanceImageRepository.delete(image);
 
-        // Remove from request's image list
         request.getImages().removeIf(img -> img.getId().equals(imageId));
         maintenanceRequestRepository.save(request);
 
@@ -540,7 +540,6 @@ public class MaintenanceServiceImpl implements MaintenanceService {
                         r.getPriority() == MaintenancePriority.EMERGENCY)
                 .count();
 
-        // Requests by category
         Map<String, Long> requestsByCategory = Arrays.stream(MaintenanceCategory.values())
                 .collect(Collectors.toMap(
                         MaintenanceCategory::name,
@@ -549,7 +548,6 @@ public class MaintenanceServiceImpl implements MaintenanceService {
                                 .count()
                 ));
 
-        // Requests by status
         Map<String, Long> requestsByStatus = Arrays.stream(MaintenanceStatus.values())
                 .collect(Collectors.toMap(
                         MaintenanceStatus::name,
@@ -558,7 +556,6 @@ public class MaintenanceServiceImpl implements MaintenanceService {
                                 .count()
                 ));
 
-        // Requests by priority
         Map<String, Long> requestsByPriority = Arrays.stream(MaintenancePriority.values())
                 .collect(Collectors.toMap(
                         MaintenancePriority::name,
@@ -567,13 +564,11 @@ public class MaintenanceServiceImpl implements MaintenanceService {
                                 .count()
                 ));
 
-        // Recent requests (last 7 days)
         LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
         long requestsLast7Days = allRequests.stream()
                 .filter(r -> r.getRequestDate().isAfter(weekAgo))
                 .count();
 
-        // Last 30 days
         LocalDateTime monthAgo = LocalDateTime.now().minusDays(30);
         long requestsLast30Days = allRequests.stream()
                 .filter(r -> r.getRequestDate().isAfter(monthAgo))
@@ -628,8 +623,10 @@ public class MaintenanceServiceImpl implements MaintenanceService {
         User user = userRepository.findByEmail(callerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        if (user.getRole().name().contains("ADMIN") || user.getRole().name().contains("LANDLORD")) {
+        if (user.getRole().name().contains("ADMIN")) {
             return maintenanceRequestRepository.countOpenRequests(OPEN_STATUSES);
+        } else if (user.getRole().name().contains("LANDLORD")) {
+            return maintenanceRequestRepository.countOpenRequestsByPropertyOwner(user, OPEN_STATUSES);
         } else {
             return maintenanceRequestRepository.countOpenRequestsByTenant(user, OPEN_STATUSES);
         }
@@ -651,7 +648,12 @@ public class MaintenanceServiceImpl implements MaintenanceService {
             return true;
         }
 
-        // Add landlord property check if needed
+        if (user.getRole().name().contains("LANDLORD")) {
+            return request.getProperty() != null &&
+                    request.getProperty().getOwner() != null &&
+                    request.getProperty().getOwner().getId().equals(user.getId());
+        }
+
         return false;
     }
 
@@ -667,12 +669,12 @@ public class MaintenanceServiceImpl implements MaintenanceService {
         MaintenanceRequest request = maintenanceRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Maintenance request not found"));
 
-        // Landlord update logic (add property check if needed)
         if (user.getRole().name().contains("LANDLORD")) {
-            return false; // Implement property ownership check
+            return request.getProperty() != null &&
+                    request.getProperty().getOwner() != null &&
+                    request.getProperty().getOwner().getId().equals(user.getId());
         }
 
-        // Tenant can only update their own pending requests
         return request.getTenant().getEmail().equals(userEmail) &&
                 request.getStatus() == MaintenanceStatus.PENDING;
     }
@@ -696,7 +698,11 @@ public class MaintenanceServiceImpl implements MaintenanceService {
                 .tenantId(request.getTenant().getId())
                 .tenantName(request.getTenant().getFirstName() + " " + request.getTenant().getLastName())
                 .tenantEmail(request.getTenant().getEmail())
-
+                .tenantPhone(request.getTenant().getPhoneNumber())
+                .propertyId(request.getProperty() != null ? request.getProperty().getId() : null)
+                .propertyTitle(request.getProperty() != null ? request.getProperty().getTitle() : null)
+                .propertyAddress(request.getProperty() != null ? request.getProperty().getAddress() : null)
+                .propertyType(request.getProperty() != null ? request.getProperty().getType().name() : null)
                 .isOpen(request.getStatus().isOpen())
                 .isCompleted(request.getStatus() == MaintenanceStatus.COMPLETED ||
                         request.getStatus() == MaintenanceStatus.CANCELLED ||
@@ -706,7 +712,6 @@ public class MaintenanceServiceImpl implements MaintenanceService {
                 .isUrgent(request.getPriority() == MaintenancePriority.URGENT ||
                         request.getPriority() == MaintenancePriority.EMERGENCY);
 
-        // Map images if they exist
         if (request.getImages() != null && !request.getImages().isEmpty()) {
             List<MaintenanceResponse.MaintenanceImageResponse> imageResponses = request.getImages().stream()
                     .map(this::mapImageToResponse)
