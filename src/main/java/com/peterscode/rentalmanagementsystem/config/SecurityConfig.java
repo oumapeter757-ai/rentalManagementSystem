@@ -169,15 +169,15 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/",
-                                "/api/health",                    // Add this line
-                                "/api/files/health",              // Your existing endpoint
+                                "/api/health",
+                                "/api/files/health",
                                 "/actuator/health",
                                 "/api/auth/**",
                                 "/api/files/**",
                                 "/uploads/**",
                                 "/static/**",
-                                "/swagger-ui/**",                 // Now this will work
-                                "/v3/api-docs/**",                // Now this will work
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
                                 "/error"
                         ).permitAll()
 

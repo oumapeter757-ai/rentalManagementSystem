@@ -1,6 +1,5 @@
 package com.peterscode.rentalmanagementsystem.model.property;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
 import com.peterscode.rentalmanagementsystem.model.user.User;

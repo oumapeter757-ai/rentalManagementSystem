@@ -16,7 +16,7 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Your frontend origins - ADD BOTH HTTP AND HTTPS
+
         configuration.setAllowedOrigins(Arrays.asList(
 
 
@@ -35,7 +35,8 @@ public class CorsConfig {
                 "http://localhost:5500",
                 "http://127.0.0.1:5500",
                 "http://localhost:8081",
-                "http://10.178.73.1:8081"
+                "http://10.178.73.1:8081",
+                "https://halfhearted-shavonda-unedificial.ngrok-free.dev"
         ));
 
         configuration.setAllowedMethods(Arrays.asList(

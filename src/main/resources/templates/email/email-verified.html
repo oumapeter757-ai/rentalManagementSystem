@@ -84,7 +84,7 @@
     <h2>Email Verification Failed</h2>
     <p th:text="${message}">The verification token is invalid or has expired.</p>
 
-    <a th:href="${frontendUrl} + '/auth/resend-verification'" class="button">Request New Verification Email</a>
+    <a th:href="${frontendUrl} + '/resend-verification'" class="button">Request New Verification Email</a>
 
     <div class="footer">
         <p>© <span th:text="${currentYear}">2025</span> Rental Management System. All rights reserved.</p>

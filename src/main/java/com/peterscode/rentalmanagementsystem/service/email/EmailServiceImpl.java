@@ -338,8 +338,8 @@ public class EmailServiceImpl implements EmailService {
         if (templateName != null && templateName.contains("password-reset")) {
             String token = (String) variables.getOrDefault("token", "");
             Integer expiryHours = (Integer) variables.getOrDefault("expiryHours", 24);
-            String frontendResetLink = frontendUrl + "/auth/reset-password?token=" + token;
-            String directApiLink = backendUrl + "/api/auth/reset-password?token=" + token;
+            String frontendResetLink = frontendUrl + "/reset-password?token=" + token;
+            String directApiLink = backendUrl + "/api/reset-password?token=" + token;
 
             return generatePasswordResetEmailHtml(firstName, token, frontendResetLink, directApiLink, expiryHours, currentYear);
         }
@@ -546,7 +546,7 @@ public class EmailServiceImpl implements EmailService {
                     </div>
                 </div>
             </body>
-            </html>.
+            </html>
            \s""", firstName, resetCode, expiryMinutes, expiryMinutes, frontendUrl, resetCode, currentYear);
     }
 
@@ -573,10 +573,10 @@ public class EmailServiceImpl implements EmailService {
 
             log.info("   🔐 Password Reset Code: {}", resetCode);
             log.info("   ⏰ Expires in: {} minutes", expiryMinutes);
-            log.info("   🌐 Reset URL: {}/auth/reset-password", frontendUrl);
+            log.info("   🌐 Reset URL: {}/reset-password", frontendUrl);
 
             log.info("   💡 To test with curl:");
-            log.info("       curl -X POST '{}/api/auth/reset-password' \\", backendUrl);
+            log.info("       curl -X POST '{}/api/reset-password' \\", backendUrl);
             log.info("            -H 'Content-Type: application/json' \\");
 
         }

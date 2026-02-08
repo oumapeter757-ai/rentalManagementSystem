@@ -410,7 +410,7 @@ public class AuthServiceImpl implements AuthService {
     private void sendVerificationEmail(User user, String token) {
         try {
             // Use frontend URL for verification link
-            String verificationLink = frontendUrl + "/auth/verify-email?token=" + token;
+            String verificationLink = frontendUrl + "/verify-email?token=" + token;
             String subject = "Verify Your Email - Rental Management System";
 
             // Create variables map for template

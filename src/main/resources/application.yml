@@ -30,7 +30,7 @@ spring:
     host: smtp.gmail.com
     port: 465
     username: ${EMAIL_USERNAME:oumapeter757@gmail.com}
-    password: ${EMAIL_PASSWORD:pbze vwke jjmw ivgy}  # REMOVED SPACE AT END
+    password: ${EMAIL_PASSWORD:cnel xuht zxfd msrk }  # REMOVED SPACE AT END
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -62,6 +62,7 @@ spring:
 # REMOVE the management section from here
 
 app:
+  frontend-url: https://halfhearted-shavonda-unedificial.ngrok-free.dev
   cors:
     allowed-origins: http://localhost:8000,http://localhost:3000,http://localhost:5500,http://127.0.0.1:8000,http://127.0.0.1:3000,http://127.0.0.1:5500,http://localhost:5173,http://localhost:5174
     allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD
@@ -73,10 +74,7 @@ app:
   upload-dir: ./uploads
 
   verification:
-    url: http://localhost:5173/auth/verify-email
-
-  frontend-url: http://localhost:5173
-
+    url: http://localhost:5173/verify-email
 jwt:
   secret: b61eb47178bc3fc9fedd50fecb3f12416e0cc2fe3c37df6a809c2d7f33a060fb5398cab8d664a88c88fca90c8e5d9c6ce41e42e14e9919b980975b8dd4c56a5e
   expiration-ms: 86400000 # 24 hours
