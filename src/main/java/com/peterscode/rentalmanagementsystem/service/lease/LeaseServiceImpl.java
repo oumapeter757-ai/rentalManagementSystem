@@ -142,4 +142,31 @@ public class LeaseServiceImpl implements LeaseService {
         return leaseRepository.findByProperty_IdAndStatus(propertyId, LeaseStatus.ACTIVE)
                 .stream().map(LeaseMapper::toResponse).collect(Collectors.toList());
     }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<LeaseResponse> getAllLeases(String callerEmail) {
+        User caller = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new UserNotFoundException("Caller not found"));
+
+        // Admin sees all leases
+        if (caller.getRole() == Role.ADMIN) {
+            return leaseRepository.findAll()
+                    .stream()
+                    .map(LeaseMapper::toResponse)
+                    .collect(Collectors.toList());
+        }
+
+        // Landlord sees only leases for their properties
+        if (caller.getRole() == Role.LANDLORD) {
+            return leaseRepository.findAll()
+                    .stream()
+                    .filter(lease -> lease.getProperty().getOwner() != null && lease.getProperty().getOwner().getId().equals(caller.getId()))
+                    .map(LeaseMapper::toResponse)
+                    .collect(Collectors.toList());
+        }
+
+        // Other roles see no leases
+        return List.of();
+    }
 }

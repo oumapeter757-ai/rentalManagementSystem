@@ -77,6 +77,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/auth/resend-verification").permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/reset-password").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/api/auth/admin-exists").permitAll()
 
 // Property Image endpoints
                                 .requestMatchers(HttpMethod.GET, "/api/properties/*/images").permitAll()
@@ -98,7 +99,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
                                 .requestMatchers(HttpMethod.GET, "/api/payments/{id}").authenticated()
                                 .requestMatchers(HttpMethod.GET, "/api/payments/transaction/{transactionCode}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/payments").hasRole("ADMIN")
+                                .requestMatchers(HttpMethod.GET, "/api/payments").hasAnyRole("ADMIN", "LANDLORD")  // SECURITY FIX: Allow landlords
                                 .requestMatchers(HttpMethod.GET, "/api/payments/status/{status}").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.GET, "/api/payments/method/{method}").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.GET, "/api/payments/mpesa/pending").hasRole("ADMIN")
@@ -129,6 +130,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.GET, "/api/leases/property/*").hasAnyRole("LANDLORD", "ADMIN")
                                 .requestMatchers(HttpMethod.GET, "/api/leases/property/*/active").hasAnyRole("LANDLORD", "ADMIN")
                                 .requestMatchers(HttpMethod.GET, "/api/leases/*").authenticated()
+                                .requestMatchers(HttpMethod.GET, "/api/leases").hasAnyRole("LANDLORD", "ADMIN")  // SECURITY FIX: Allow landlords
                                 .requestMatchers(HttpMethod.PUT, "/api/leases/*/terminate").hasAnyRole("LANDLORD", "ADMIN", "TENANT")
 
 // Rental Application endpoints

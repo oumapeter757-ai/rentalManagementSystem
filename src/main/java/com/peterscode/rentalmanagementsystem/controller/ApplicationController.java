@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -80,21 +81,25 @@ public class ApplicationController {
     @GetMapping("/property/{propertyId}")
     @PreAuthorize("hasAnyRole('LANDLORD', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<ApplicationResponse>>> getApplicationsByProperty(
+            Authentication authentication,
             @PathVariable Long propertyId,
             HttpServletRequest httpRequest) {
-        List<ApplicationResponse> applications = applicationService.getApplicationsByProperty(propertyId);
+        String callerEmail = authentication.getName();
+        List<ApplicationResponse> applications = applicationService.getApplicationsByProperty(propertyId, callerEmail);
         ApiResponse<List<ApplicationResponse>> response = ApiResponse.success(applications);
         response.setPath(httpRequest.getRequestURI());
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "Get applications by status", description = "Filter applications by status")
+    @Operation(summary = "Get applications by status", description = "Filter applications by status (role-based)")
     @GetMapping("/status/{status}")
     @PreAuthorize("hasAnyRole('TENANT', 'LANDLORD', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<ApplicationResponse>>> getApplicationsByStatus(
+            Authentication authentication,
             @PathVariable RentalApplicationStatus status,
             HttpServletRequest httpRequest) {
-        List<ApplicationResponse> applications = applicationService.getApplicationsByStatus(status);
+        String callerEmail = authentication.getName();
+        List<ApplicationResponse> applications = applicationService.getApplicationsByStatus(status, callerEmail);
         ApiResponse<List<ApplicationResponse>> response = ApiResponse.success(applications);
         response.setPath(httpRequest.getRequestURI());
         return ResponseEntity.ok(response);
@@ -104,10 +109,12 @@ public class ApplicationController {
     @PutMapping("/{applicationId}/status")
     @PreAuthorize("hasAnyRole('LANDLORD', 'ADMIN')")
     public ResponseEntity<ApiResponse<ApplicationResponse>> updateApplicationStatus(
+            Authentication authentication,
             @PathVariable Long applicationId,
             @RequestBody ApplicationStatusUpdateRequest request,
             HttpServletRequest httpRequest) {
-        ApplicationResponse application = applicationService.updateApplicationStatus(applicationId, request);
+        String callerEmail = authentication.getName();
+        ApplicationResponse application = applicationService.updateApplicationStatus(applicationId, request, callerEmail);
         ApiResponse<ApplicationResponse> response = ApiResponse.success(
                 "Application status updated successfully",
                 application

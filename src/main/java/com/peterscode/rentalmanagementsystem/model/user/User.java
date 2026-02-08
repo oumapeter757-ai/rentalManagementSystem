@@ -29,6 +29,7 @@ public class User {
     private String username;
 
     @Column(nullable = false)
+    @JsonIgnore  // SECURITY: Never expose password hashes in responses
     private String password;
 
     @Column(name = "first_name")

@@ -2,6 +2,7 @@ package com.peterscode.rentalmanagementsystem.service.property;
 
 import com.peterscode.rentalmanagementsystem.dto.request.PropertyRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.PropertyResponse;
+import com.peterscode.rentalmanagementsystem.dto.response.PublicPropertyResponse;
 import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.property.PropertyImage;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
@@ -95,6 +96,15 @@ public class PropertyServiceImpl implements PropertyService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    @Override
+    public List<PublicPropertyResponse> getAllPublicProperties() {
+        return propertyRepository.findAll()
+                .stream()
+                .map(this::mapToPublicResponse)
+                .toList();
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<PropertyResponse> getPropertiesByOwner(Long ownerId) {
@@ -112,8 +122,9 @@ public class PropertyServiceImpl implements PropertyService {
 
     @Override
     @Transactional
-    public PropertyResponse updateProperty(Long propertyId, PropertyRequest request) {
-        User currentUser = getCurrentAuthenticatedUser();
+    public PropertyResponse updateProperty(Long propertyId, PropertyRequest request, String callerEmail) {
+        User currentUser = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         Property property = getProperty(propertyId);
 
         if (currentUser.getRole() == Role.LANDLORD &&
@@ -160,8 +171,9 @@ public class PropertyServiceImpl implements PropertyService {
 
     @Override
     @Transactional
-    public void deleteProperty(Long propertyId) {
-        User currentUser = getCurrentAuthenticatedUser();
+    public void deleteProperty(Long propertyId, String callerEmail) {
+        User currentUser = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         Property property = getProperty(propertyId);
 
         if (currentUser.getRole() == Role.LANDLORD &&
@@ -214,6 +226,33 @@ public class PropertyServiceImpl implements PropertyService {
                 .size(property.getSize())
                 .ownerId(String.valueOf(property.getOwner().getId()))
                 .ownerEmail(property.getOwner().getEmail())
+                .imageUrls(property.getImages() != null ?
+                        property.getImages().stream()
+                                .map(PropertyImage::getFileUrl)
+                                .toList() :
+                        List.of())
+                .build();
+    }
+
+    /**
+     * Maps property to public response WITHOUT sensitive owner information.
+     * Use this for unauthenticated/public endpoints.
+     */
+    private PublicPropertyResponse mapToPublicResponse(Property property) {
+        return PublicPropertyResponse.builder()
+                .id(property.getId())
+                .title(property.getTitle())
+                .description(property.getDescription())
+                .address(property.getAddress())
+                .location(property.getLocation())
+                .rent(property.getRentAmount().doubleValue())
+                .type(property.getType())
+                .bedrooms(property.getBedrooms())
+                .bathrooms(property.getBathrooms())
+                .furnished(property.getFurnished())
+                .available(property.getAvailable())
+                .amenities(property.getAmenities())
+                .size(property.getSize())
                 .imageUrls(property.getImages() != null ?
                         property.getImages().stream()
                                 .map(PropertyImage::getFileUrl)

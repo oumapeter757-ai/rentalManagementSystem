@@ -98,4 +98,15 @@ public class LeaseController {
                 ApiResponse.ok("Active leases for property", list)
         );
     }
+
+    // Get all leases (Admin sees all, Landlord sees only their properties' leases)
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    public ResponseEntity<ApiResponse<List<LeaseResponse>>> getAllLeases(Authentication authentication) {
+        String callerEmail = authentication.getName();
+        List<LeaseResponse> list = service.getAllLeases(callerEmail);
+        return ResponseEntity.ok(
+                ApiResponse.ok("All leases fetched", list)
+        );
+    }
 }

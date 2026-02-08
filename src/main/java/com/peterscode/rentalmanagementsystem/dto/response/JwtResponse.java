@@ -7,6 +7,11 @@ import lombok.Data;
 @Builder
 public class JwtResponse {
     private String token;
-    private String tokenType = "Bearer";
+    private String tokenType;
     private String role;
+    private Long userId;
+    private String email;
+    private String firstName;
+    private String lastName;
+    private String username;
 }

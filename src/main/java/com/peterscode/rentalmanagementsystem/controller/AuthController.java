@@ -84,6 +84,13 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("User created successfully", response));
     }
 
+    @GetMapping("/admin-exists")
+    @Operation(summary = "Check if admin already exists")
+    public ResponseEntity<ApiResponse<Boolean>> checkAdminExists() {
+        boolean exists = authService.adminExists();
+        return ResponseEntity.ok(ApiResponse.success("Admin exists check", exists));
+    }
+
     @GetMapping("/verify-email")
     @Operation(summary = "Verify email with token")
     public String verifyEmail(@RequestParam String token, Model model) {

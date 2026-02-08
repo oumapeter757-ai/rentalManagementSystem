@@ -47,7 +47,7 @@ public class UserController {
     }
 
     @GetMapping("/landlords")
-    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @PreAuthorize("hasRole('ADMIN')")  // SECURITY: Only admins should see all landlords
     @Operation(summary = "Get all landlords (Admin only)")
     public ResponseEntity<ApiResponse<List<User>>> getLandlords() {
         List<User> landlords = userService.getUsersByRole(Role.LANDLORD);

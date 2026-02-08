@@ -14,6 +14,7 @@ import com.peterscode.rentalmanagementsystem.model.payment.PaymentMethod;
 import com.peterscode.rentalmanagementsystem.model.payment.PaymentStatus;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
 import com.peterscode.rentalmanagementsystem.model.user.User;
+import com.peterscode.rentalmanagementsystem.repository.LeaseRepository;
 import com.peterscode.rentalmanagementsystem.repository.PaymentRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
+    private final LeaseRepository leaseRepository;
     private final MpesaService mpesaService;
     private final ObjectMapper objectMapper;
 
@@ -207,12 +209,38 @@ public class PaymentServiceImpl implements PaymentService {
         return PaymentResponse.fromEntity(payment);
     }
 
-    @Override
     @Transactional(readOnly = true)
-    public List<PaymentResponse> getAllPayments() {
-        return paymentRepository.findAll().stream()
-                .map(PaymentResponse::fromEntity)
-                .collect(Collectors.toList());
+    @Override
+    public List<PaymentResponse> getAllPayments(String callerEmail) {
+        User caller = userRepository.findByEmail(callerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        // Admin sees all payments
+        if (caller.getRole() == Role.ADMIN) {
+            return paymentRepository.findAll().stream()
+                    .map(PaymentResponse::fromEntity)
+                    .collect(Collectors.toList());
+        }
+        
+        // Landlord sees only payments for their properties (through leases)
+        if (caller.getRole() == Role.LANDLORD) {
+            return paymentRepository.findAll().stream()
+                    .filter(payment -> {
+                        User tenant = payment.getTenant();
+                        // Check if this tenant has any lease on landlord's properties
+                        return leaseRepository.findAll().stream()
+                                .anyMatch(lease -> lease.getTenant() != null &&
+                                         lease.getTenant().getId().equals(tenant.getId()) &&
+                                         lease.getProperty() != null && 
+                                         lease.getProperty().getOwner() != null &&
+                                         lease.getProperty().getOwner().getId().equals(caller.getId()));
+                    })
+                    .map(PaymentResponse::fromEntity)
+                    .collect(Collectors.toList());
+        }
+        
+        // Other roles (TENANT) see no payments via this endpoint (they should use /me)
+        return List.of();
     }
 
     @Override

@@ -86,11 +86,11 @@ public class PaymentController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
     @Operation(summary = "Get all payments")
-    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getAllPayments() {
-
-        List<PaymentResponse> payments = paymentService.getAllPayments();
+    public ResponseEntity<ApiResponse<List<PaymentResponse>>> getAllPayments(Authentication authentication) {
+        String callerEmail = authentication.getName();
+        List<PaymentResponse> payments = paymentService.getAllPayments(callerEmail);
         return ResponseEntity.ok(
                 ApiResponse.ok("All payments fetched successfully", payments)
         );

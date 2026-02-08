@@ -14,6 +14,7 @@ public interface AuthService {
     JwtResponse login(LoginRequest request);
     boolean verifyEmail(String token);
     void resendVerificationEmail(String email);
+    boolean adminExists();
 
     // New methods for your implementation
     JwtResponse registerFirstAdmin(RegisterRequest request);

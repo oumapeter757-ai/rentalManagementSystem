@@ -102,8 +102,9 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ApplicationResponse> getApplicationsByProperty(Long propertyId) {
-        User currentUser = getCurrentAuthenticatedUser();
+    public List<ApplicationResponse> getApplicationsByProperty(Long propertyId, String callerEmail) {
+        User currentUser = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         Property property = propertyRepository.findById(propertyId)
                 .orElseThrow(() -> new RuntimeException("Property not found"));
 
@@ -121,8 +122,9 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ApplicationResponse> getApplicationsByStatus(RentalApplicationStatus status) {
-        User currentUser = getCurrentAuthenticatedUser();
+    public List<ApplicationResponse> getApplicationsByStatus(RentalApplicationStatus status, String callerEmail) {
+        User currentUser = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         List<RentalApplication> applications;
 
         if (currentUser.getRole() == Role.ADMIN) {
@@ -140,9 +142,10 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     @Transactional
-    public ApplicationResponse updateApplicationStatus(Long applicationId, ApplicationStatusUpdateRequest request) {
+    public ApplicationResponse updateApplicationStatus(Long applicationId, ApplicationStatusUpdateRequest request, String callerEmail) {
         RentalApplication application = getApplication(applicationId);
-        User currentUser = getCurrentAuthenticatedUser();
+        User currentUser = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         // Only property owner or admin can update status
         if (!application.getProperty().getOwner().getId().equals(currentUser.getId()) &&
@@ -219,7 +222,8 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     @Transactional(readOnly = true)
     public List<ApplicationResponse> getPendingApplications() {
-        return getApplicationsByStatus(RentalApplicationStatus.PENDING);
+        User currentUser = getCurrentAuthenticatedUser();
+        return getApplicationsByStatus(RentalApplicationStatus.PENDING, currentUser.getEmail());
     }
 
     // Helper methods

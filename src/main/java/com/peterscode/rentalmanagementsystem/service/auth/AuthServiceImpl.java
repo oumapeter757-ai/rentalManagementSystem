@@ -42,6 +42,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.Random;
 
+import static com.peterscode.rentalmanagementsystem.dto.response.JwtResponse.*;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -140,6 +142,11 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public boolean adminExists() {
+        return userRepository.countByRole(Role.ADMIN) > 0;
+    }
+
+    @Override
     public void resendVerificationEmail(String email) {
         log.info("Resend verification email requested for: {}", email);
 
@@ -196,9 +203,15 @@ public class AuthServiceImpl implements AuthService {
         sendRegistrationEmail(savedAdmin, "Admin");
 
         String token = jwtService.generateToken(savedAdmin);
-        return JwtResponse.builder()
+        return builder()
                 .token(token)
+                .tokenType("Bearer")
                 .role(savedAdmin.getRole().name())
+                .userId(savedAdmin.getId())
+                .email(savedAdmin.getEmail())
+                .firstName(savedAdmin.getFirstName())
+                .lastName(savedAdmin.getLastName())
+                .username(savedAdmin.getUsername())
                 .build();
     }
 
@@ -229,9 +242,15 @@ public class AuthServiceImpl implements AuthService {
         sendRegistrationEmail(savedUser, role.name());
 
         String token = jwtService.generateToken(savedUser);
-        return JwtResponse.builder()
+        return builder()
                 .token(token)
+                .tokenType("Bearer")
                 .role(savedUser.getRole().name())
+                .userId(savedUser.getId())
+                .email(savedUser.getEmail())
+                .firstName(savedUser.getFirstName())
+                .lastName(savedUser.getLastName())
+                .username(savedUser.getUsername())
                 .build();
     }
 
@@ -268,9 +287,15 @@ public class AuthServiceImpl implements AuthService {
 
 
         String jwtToken = jwtService.generateToken(savedTenant);
-        return JwtResponse.builder()
+        return builder()
                 .token(jwtToken)
+                .tokenType("Bearer")
                 .role(savedTenant.getRole().name())
+                .userId(savedTenant.getId())
+                .email(savedTenant.getEmail())
+                .firstName(savedTenant.getFirstName())
+                .lastName(savedTenant.getLastName())
+                .username(savedTenant.getUsername())
                 .build();
     }
 
@@ -300,9 +325,15 @@ public class AuthServiceImpl implements AuthService {
             sendLoginEmail(user, ipAddress);
 
             String token = jwtService.generateToken(user);
-            return JwtResponse.builder()
+            return builder()
                     .token(token)
+                    .tokenType("Bearer")
                     .role(user.getRole().name())
+                    .userId(user.getId())
+                    .email(user.getEmail())
+                    .firstName(user.getFirstName())
+                    .lastName(user.getLastName())
+                    .username(user.getUsername())
                     .build();
 
         } catch (BadCredentialsException ex) {

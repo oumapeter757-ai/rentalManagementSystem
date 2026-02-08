@@ -5,6 +5,7 @@ import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentSummaryResponse;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,7 +16,10 @@ public interface PaymentService {
     void processMpesaCallback(String callbackData);
     PaymentResponse getPaymentById(Long id);
     PaymentResponse getPaymentByTransactionCode(String transactionCode);
-    List<PaymentResponse> getAllPayments();
+
+    @Transactional(readOnly = true)
+    List<PaymentResponse> getAllPayments(String callerEmail);
+
     List<PaymentResponse> getPaymentsByTenant(Long tenantId);
     List<PaymentResponse> getPaymentsByStatus(String status);
     List<PaymentResponse> getPaymentsByMethod(String method);

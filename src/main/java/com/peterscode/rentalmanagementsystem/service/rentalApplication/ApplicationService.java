@@ -17,11 +17,11 @@ public interface ApplicationService {
 
     List<ApplicationResponse> getApplicationsForMyProperties();
 
-    List<ApplicationResponse> getApplicationsByProperty(Long propertyId);
+    List<ApplicationResponse> getApplicationsByProperty(Long propertyId, String callerEmail);
 
-    List<ApplicationResponse> getApplicationsByStatus(RentalApplicationStatus status);
+    List<ApplicationResponse> getApplicationsByStatus(RentalApplicationStatus status, String callerEmail);
 
-    ApplicationResponse updateApplicationStatus(Long applicationId, ApplicationStatusUpdateRequest request);
+    ApplicationResponse updateApplicationStatus(Long applicationId, ApplicationStatusUpdateRequest request, String callerEmail);
 
     void cancelApplication(Long applicationId);
 
