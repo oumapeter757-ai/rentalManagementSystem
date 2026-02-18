@@ -34,6 +34,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -78,37 +79,46 @@ public class AuthServiceImpl implements AuthService {
     public boolean register(RegisterRequest request) {
         log.info("General registration attempt: {}", request.getEmail());
 
-        // Validate email doesn't exist
-        validateEmailNotExists(request.getEmail());
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new UserAlreadyExistsException("User with email " + request.getEmail() + " already exists");
+        }
 
-        // For general registration, default to TENANT role
-        User user = User.builder()
-                .email(request.getEmail().toLowerCase().trim())
-                .username(request.getUsername().toLowerCase().trim())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
-                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
-                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
-                .role(Role.TENANT)
-                .enabled(false) // Require email verification
-                .build();
+        try {
+            // Create new user
+            User user = User.builder()
+                    .firstName(request.getFirstName())
+                    .lastName(request.getLastName())
+                    .email(request.getEmail())
+                    .password(passwordEncoder.encode(request.getPassword()))
+                    .phoneNumber(request.getPhoneNumber())
+                    .role(Role.TENANT)
+                    .enabled(false)
+                    .createdAt(Instant.now())
+                    .updatedAt(Instant.now())
+                    .build();
 
-        User savedUser = userRepository.save(user);
+            User savedUser = userRepository.save(user);
 
-        // Create verification token
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = VerificationToken.builder()
-                .token(token)
-                .user(savedUser)
-                .expiryDate(LocalDateTime.now().plusHours(24))
-                .build();
-        verificationTokenRepository.save(verificationToken);
+            // Generate verification token
+            String token = UUID.randomUUID().toString();
 
-        // Send verification email
-        sendVerificationEmail(savedUser, token);
+            VerificationToken verificationToken = VerificationToken.builder()
+                    .token(token)
+                    .user(savedUser)
+                    .expiryDate(LocalDateTime.now().plusHours(24))
+                    .build();
 
-        log.info("User registered successfully: {}", savedUser.getEmail());
-        return true;
+            verificationTokenRepository.save(verificationToken);
+
+            // Send verification email
+            sendVerificationEmail(savedUser, token);
+
+            log.info("User registered successfully: {}", savedUser.getEmail());
+            return true;
+        } catch (Exception e) {
+            log.error("Error during user registration: {}", e.getMessage());
+            throw new RuntimeException("Registration failed: " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -254,11 +264,9 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
-
     @Override
     public JwtResponse registerTenant(RegisterRequest request) {
         log.info("Registering tenant: {}", request.getEmail());
-
 
         User tenant = User.builder()
                 .email(request.getEmail().toLowerCase().trim())
@@ -285,7 +293,6 @@ public class AuthServiceImpl implements AuthService {
         // Send verification email
         sendVerificationEmail(savedTenant, token);
 
-
         String jwtToken = jwtService.generateToken(savedTenant);
         return builder()
                 .token(jwtToken)
@@ -307,9 +314,7 @@ public class AuthServiceImpl implements AuthService {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.getEmail().toLowerCase().trim(),
-                            request.getPassword()
-                    )
-            );
+                            request.getPassword()));
 
             SecurityUser securityUser = (SecurityUser) authentication.getPrincipal();
             User user = securityUser.user();
@@ -356,7 +361,7 @@ public class AuthServiceImpl implements AuthService {
 
         // Create password reset token with code
         PasswordResetToken resetToken = PasswordResetToken.builder()
-                .token(resetCode)  // Store the 6-digit code as token
+                .token(resetCode) // Store the 6-digit code as token
                 .user(user)
                 .expiryDate(expiryDate)
                 .used(false)
@@ -377,7 +382,8 @@ public class AuthServiceImpl implements AuthService {
     // Update the resetPassword method to accept code
     @Override
     public void resetPassword(ResetPasswordRequest request) {
-        log.info("Password reset attempt with token: {}", request.getToken().substring(0, Math.min(request.getToken().length(), 10)) + "...");
+        log.info("Password reset attempt with token: {}",
+                request.getToken().substring(0, Math.min(request.getToken().length(), 10)) + "...");
 
         // Validate passwords match
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
@@ -431,6 +437,22 @@ public class AuthServiceImpl implements AuthService {
         return true;
     }
 
+    @Override
+    public JwtResponse getUserInfoByEmail(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+
+        return builder()
+                .tokenType("Bearer")
+                .role(user.getRole().name())
+                .userId(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .username(user.getUsername())
+                .build();
+    }
+
     // Helper methods
     private void validateEmailNotExists(String email) {
         if (userRepository.existsByEmailIgnoreCase(email.toLowerCase().trim())) {
@@ -451,14 +473,14 @@ public class AuthServiceImpl implements AuthService {
             variables.put("expiryHours", 24);
 
             // Create EmailRequest with variables
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
-                    com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
-                            .recipient(user.getEmail())
-                            .subject(subject)
-                            .templateName("email-verification")
-                            .variables(variables)
-                            .html(true)
-                            .build();
+            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
+                    .builder()
+                    .recipient(user.getEmail())
+                    .subject(subject)
+                    .templateName("email-verification")
+                    .variables(variables)
+                    .html(true)
+                    .build();
 
             emailService.sendEmailAsync(emailRequest);
             log.info("📧 Verification email sent to: {}", user.getEmail());
@@ -485,38 +507,38 @@ public class AuthServiceImpl implements AuthService {
             variables.put("registeredTime", currentTime);
 
             String body = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; }
-                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h2>Registration Successful</h2>
-                        <p>Hello %s %s,</p>
-                        <p>Your account has been successfully registered as a <strong>%s</strong>.</p>
-                        <p><strong>Email:</strong> %s</p>
-                        <p><strong>Registered On:</strong> %s</p>
-                        <p>You can now log in to the system.</p>
-                    </div>
-                </body>
-                </html>
-                """.formatted(user.getFirstName(), user.getLastName(), userType,
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <style>
+                            body { font-family: Arial, sans-serif; line-height: 1.6; }
+                            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h2>Registration Successful</h2>
+                            <p>Hello %s %s,</p>
+                            <p>Your account has been successfully registered as a <strong>%s</strong>.</p>
+                            <p><strong>Email:</strong> %s</p>
+                            <p><strong>Registered On:</strong> %s</p>
+                            <p>You can now log in to the system.</p>
+                        </div>
+                    </body>
+                    </html>
+                    """.formatted(user.getFirstName(), user.getLastName(), userType,
                     user.getEmail(), currentTime);
 
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
-                    com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
-                            .recipient(user.getEmail())
-                            .subject(subject)
-                            .body(body)
-                            .templateName("registration-success")
-                            .variables(variables)
-                            .html(true)
-                            .build();
+            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
+                    .builder()
+                    .recipient(user.getEmail())
+                    .subject(subject)
+                    .body(body)
+                    .templateName("registration-success")
+                    .variables(variables)
+                    .html(true)
+                    .build();
 
             emailService.sendEmailAsync(emailRequest);
             log.info("Registration email sent to: {}", user.getEmail());
@@ -535,14 +557,14 @@ public class AuthServiceImpl implements AuthService {
             variables.put("firstName", user.getFirstName());
             variables.put("frontendUrl", frontendUrl);
 
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
-                    com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
-                            .recipient(user.getEmail())
-                            .subject(subject)
-                            .templateName("welcome")
-                            .variables(variables)
-                            .html(true)
-                            .build();
+            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
+                    .builder()
+                    .recipient(user.getEmail())
+                    .subject(subject)
+                    .templateName("welcome")
+                    .variables(variables)
+                    .html(true)
+                    .build();
 
             emailService.sendEmailAsync(emailRequest);
             log.info("Welcome email sent to: {}", user.getEmail());
@@ -563,14 +585,14 @@ public class AuthServiceImpl implements AuthService {
             variables.put("loginTime", currentTime);
             variables.put("ipAddress", ipAddress);
 
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest =
-                    com.peterscode.rentalmanagementsystem.dto.request.EmailRequest.builder()
-                            .recipient(user.getEmail())
-                            .subject(subject)
-                            .templateName("login-success")
-                            .variables(variables)
-                            .html(true)
-                            .build();
+            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
+                    .builder()
+                    .recipient(user.getEmail())
+                    .subject(subject)
+                    .templateName("login-success")
+                    .variables(variables)
+                    .html(true)
+                    .build();
 
             emailService.sendEmailAsync(emailRequest);
             log.info("Login notification email sent to: {}", user.getEmail());
@@ -614,7 +636,8 @@ public class AuthServiceImpl implements AuthService {
 
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
-            variables.put("changedTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+            variables.put("changedTime",
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
             EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())

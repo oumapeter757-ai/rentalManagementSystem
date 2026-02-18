@@ -11,17 +11,23 @@ public interface AuthService {
 
     // Existing methods (kept for compatibility)
     boolean register(RegisterRequest request);
+
     JwtResponse login(LoginRequest request);
+
     boolean verifyEmail(String token);
+
     void resendVerificationEmail(String email);
+
     boolean adminExists();
 
     // New methods for your implementation
     JwtResponse registerFirstAdmin(RegisterRequest request);
-    JwtResponse createUserByAdmin(RegisterRequest request, Role role);
-    JwtResponse registerTenant(RegisterRequest request);
-    JwtResponse login(LoginRequest request, HttpServletRequest httpRequest);
 
+    JwtResponse createUserByAdmin(RegisterRequest request, Role role);
+
+    JwtResponse registerTenant(RegisterRequest request);
+
+    JwtResponse login(LoginRequest request, HttpServletRequest httpRequest);
 
     boolean validateResetCode(String code);
 
@@ -29,4 +35,6 @@ public interface AuthService {
     void initiatePasswordReset(String email);
 
     void resetPassword(ResetPasswordRequest request);
+
+    JwtResponse getUserInfoByEmail(String email);
 }

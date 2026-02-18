@@ -36,7 +36,8 @@ public class CorsConfig {
                 "http://127.0.0.1:5500",
                 "http://localhost:8081",
                 "http://10.178.73.1:8081",
-                "https://halfhearted-shavonda-unedificial.ngrok-free.dev"
+                "https://halfhearted-shavonda-unedificial.ngrok-free.dev",
+                "https://b690f866-dd77-4dd8-b70a-3f09997dceb7.lovableproject.com"
         ));
 
         configuration.setAllowedMethods(Arrays.asList(

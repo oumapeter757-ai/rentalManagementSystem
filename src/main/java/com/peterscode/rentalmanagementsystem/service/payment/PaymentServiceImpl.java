@@ -1,32 +1,41 @@
 package com.peterscode.rentalmanagementsystem.service.payment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.peterscode.rentalmanagementsystem.dto.request.MpesaStkRequest;
+import com.peterscode.rentalmanagementsystem.dto.request.PaymentInitiationRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
-import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
-import com.peterscode.rentalmanagementsystem.dto.response.MpesaTransactionStatusResponse;
-import com.peterscode.rentalmanagementsystem.dto.response.PaymentResponse;
-import com.peterscode.rentalmanagementsystem.dto.response.PaymentSummaryResponse;
+import com.peterscode.rentalmanagementsystem.dto.response.*;
 import com.peterscode.rentalmanagementsystem.exception.BadRequestException;
 import com.peterscode.rentalmanagementsystem.exception.ResourceNotFoundException;
 import com.peterscode.rentalmanagementsystem.model.payment.Payment;
 import com.peterscode.rentalmanagementsystem.model.payment.PaymentMethod;
 import com.peterscode.rentalmanagementsystem.model.payment.PaymentStatus;
+import com.peterscode.rentalmanagementsystem.model.payment.PaymentType;
+import com.peterscode.rentalmanagementsystem.model.lease.Lease;
+import com.peterscode.rentalmanagementsystem.model.lease.LeaseStatus;
+import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.LeaseRepository;
 import com.peterscode.rentalmanagementsystem.repository.PaymentRepository;
+import com.peterscode.rentalmanagementsystem.repository.PropertyRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.peterscode.rentalmanagementsystem.model.payment.PaymentType.*;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +45,9 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final LeaseRepository leaseRepository;
+    private final PropertyRepository propertyRepository;
     private final MpesaService mpesaService;
+    private final StripeService stripeService; // Inject StripeService
     private final ObjectMapper objectMapper;
 
 
@@ -226,14 +237,11 @@ public class PaymentServiceImpl implements PaymentService {
         if (caller.getRole() == Role.LANDLORD) {
             return paymentRepository.findAll().stream()
                     .filter(payment -> {
-                        User tenant = payment.getTenant();
-                        // Check if this tenant has any lease on landlord's properties
-                        return leaseRepository.findAll().stream()
-                                .anyMatch(lease -> lease.getTenant() != null &&
-                                         lease.getTenant().getId().equals(tenant.getId()) &&
-                                         lease.getProperty() != null && 
-                                         lease.getProperty().getOwner() != null &&
-                                         lease.getProperty().getOwner().getId().equals(caller.getId()));
+                        if (payment.getLease() == null) return false;
+                        Property property = payment.getLease().getProperty();
+                        return property != null && 
+                               property.getOwner() != null && 
+                               property.getOwner().getId().equals(caller.getId());
                     })
                     .map(PaymentResponse::fromEntity)
                     .collect(Collectors.toList());
@@ -623,6 +631,27 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.setPaidAt(LocalDateTime.now());
 
                 log.info("M-Pesa payment successful. Receipt: {}, Amount: {}", mpesaReceipt, amount);
+                
+                // ========== PROPERTY BOOKING LOGIC ==========
+                // If deposit or full payment is successful, mark deposit as paid and book property
+                if (payment.getPaymentType() == DEPOSIT ||
+                    payment.getPaymentType() == FULL_AMOUNT) {
+                    if (payment.getLease() != null) {
+                        Lease lease = payment.getLease();
+                        lease.setDepositPaid(true);
+                        lease.setStatus(LeaseStatus.ACTIVE); // Activate the lease
+                        leaseRepository.save(lease);
+                        log.info("Marked deposit as paid and activated lease: {}", lease.getId());
+                        
+                        // Mark property as unavailable (booked)
+                        Property property = lease.getProperty();
+                        if (property != null) {
+                            property.setAvailable(false);
+                            propertyRepository.save(property);
+                            log.info("Marked property {} as unavailable (booked)", property.getId());
+                        }
+                    }
+                }
             }
         } catch (Exception e) {
             log.error("Error extracting callback metadata: {}", e.getMessage());
@@ -734,6 +763,254 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (Exception e) {
             log.error("Error querying transaction status: {}", e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PaymentOptionResponse> getPaymentOptions(Long leaseId, String callerEmail) {
+        log.info("Getting payment options for lease: {} by user: {}", leaseId, callerEmail);
+        
+        Lease lease = leaseRepository.findById(leaseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lease not found"));
+        
+        User caller = userRepository.findByEmail(callerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        
+        // Security: Verify tenant owns this lease or is admin
+        if (!lease.getTenant().getId().equals(caller.getId()) && caller.getRole() != Role.ADMIN) {
+            throw new BadRequestException("You can only view payment options for your own leases");
+        }
+        
+        List<PaymentOptionResponse> options = new ArrayList<>();
+        
+        // Option 1: Deposit payment (if not paid)
+        if (lease.getDepositPaid() == null || !lease.getDepositPaid()) {
+            options.add(PaymentOptionResponse.builder()
+                    .paymentType(DEPOSIT)
+                    .amount(lease.getDeposit())
+                    .description("Security Deposit")
+                    .available(true)
+                    .build());
+        }
+        
+        // Option 2: Monthly rent (if deposit is paid or lease is active)
+        if (lease.getDepositPaid() != null && lease.getDepositPaid()) {
+            options.add(PaymentOptionResponse.builder()
+                    .paymentType(RENT)
+                    .amount(lease.getMonthlyRent())
+                    .description("Monthly Rent")
+                    .available(true)
+                    .build());
+        }
+        
+        // Option 3: Full payment (deposit + first month rent)
+        if (lease.getDepositPaid() == null || !lease.getDepositPaid()) {
+            BigDecimal fullAmount = lease.getDeposit().add(lease.getMonthlyRent());
+            options.add(PaymentOptionResponse.builder()
+                    .paymentType(FULL_PAYMENT)
+                    .amount(fullAmount)
+                    .description("Full Payment (Deposit + First Month Rent)")
+                    .available(true)
+                    .build());
+        }
+        
+        return options;
+    }
+
+    @Override
+    @Transactional
+    public PaymentResponse initiatePayment(PaymentInitiationRequest request, String callerEmail) {
+        log.info("Initiating payment initiation request by user: {}", callerEmail);
+        
+        User tenant = userRepository.findByEmail(callerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Lease lease = null;
+
+        // Case 1: Lease ID is provided
+        if (request.getLeaseId() != null) {
+            lease = leaseRepository.findById(request.getLeaseId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Lease not found"));
+            
+            // Security: Verify tenant owns this lease
+            if (!lease.getTenant().getId().equals(tenant.getId()) && tenant.getRole() != Role.TENANT) {
+                throw new BadRequestException("You can only create payments for your own leases");
+            }
+        } 
+        // Case 2: Property ID is provided (Find existing or create new lease)
+        else if (request.getPropertyId() != null) {
+            Property property = propertyRepository.findById(request.getPropertyId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+
+            // Check if tenant already has a lease for this property
+            List<Lease> existingLeases = leaseRepository.findByPropertyAndTenant(property, tenant);
+            // Filter for active or pending leases
+            Optional<Lease> activeLease = existingLeases.stream()
+                    .filter(l -> l.getStatus() == LeaseStatus.ACTIVE || l.getStatus() == LeaseStatus.PENDING)
+                    .findFirst();
+
+            if (activeLease.isPresent()) {
+                lease = activeLease.get();
+            } else {
+                // Check if property is available
+                if (!property.isAvailable() && !"AVAILABLE".equalsIgnoreCase(String.valueOf(property.getStatus()))) {
+                     throw new BadRequestException("Property is not available for leasing");
+                }
+
+                // Create a new PENDING lease for this payment
+                lease = Lease.builder()
+                        .tenant(tenant)
+                        .property(property)
+                        .startDate(LocalDate.now())
+                        .endDate(LocalDate.now().plusYears(1))
+                        .monthlyRent(property.getRentAmount())
+                        .deposit(property.getDepositAmount() != null ? property.getDepositAmount() : property.getRentAmount()) // Default deposit to rent if null
+                        .depositPaid(false)
+                        .status(LeaseStatus.PENDING)
+                        .build();
+                lease = leaseRepository.save(lease);
+                log.info("Created new PENDING lease {} for tenant {} and property {}", lease.getId(), tenant.getId(), property.getId());
+            }
+        } else {
+            throw new BadRequestException("Either Lease ID or Property ID must be provided");
+        }
+        
+        // Calculate amount based on payment type - NO MANUAL ENTRY!
+        BigDecimal amount;
+        String paymentTypeStr = request.getPaymentType().toUpperCase();
+        switch (paymentTypeStr) {
+            case "DEPOSIT":
+                if (lease.getDepositPaid() != null && lease.getDepositPaid()) {
+                    throw new BadRequestException("Deposit has already been paid");
+                }
+                amount = lease.getDeposit();
+                break;
+                
+            case "RENT":
+                if (lease.getDepositPaid() == null || !lease.getDepositPaid()) {
+                     // For flexible payments, we might allow this, but generally deposit comes first
+                     // But if it's a new lease, they should pay deposit first or FULL_AMOUNT
+                     // Let's enforce deposit first rule unless it's bundled
+                    throw new BadRequestException("Deposit must be paid first before paying rent");
+                }
+                amount = lease.getMonthlyRent();
+                break;
+                
+            case "FULL_AMOUNT":
+            case "FULL_PAYMENT":
+                if (lease.getDepositPaid() != null && lease.getDepositPaid()) {
+                    throw new BadRequestException("Deposit has already been paid");
+                }
+                amount = lease.getDeposit().add(lease.getMonthlyRent());
+                break;
+                
+            default:
+                throw new BadRequestException("Invalid payment type");
+        }
+        
+        // Format phone number for M-Pesa
+        String formattedPhone = null;
+        if ("MPESA".equalsIgnoreCase(request.getPaymentMethod())) {
+            if (request.getPhoneNumber() == null || request.getPhoneNumber().isEmpty()) {
+                throw new BadRequestException("Phone number is required for M-Pesa payments");
+            }
+            formattedPhone = mpesaService.formatPhoneNumber(request.getPhoneNumber());
+        }
+        
+        // Create payment record
+        Payment payment = Payment.builder()
+                .tenant(tenant)
+                .lease(lease)
+                .phoneNumber(formattedPhone)
+                .amount(amount)
+                .method(PaymentMethod.valueOf(request.getPaymentMethod().toUpperCase()))
+                .status(PaymentStatus.PENDING)
+                .paymentType(PaymentType.valueOf(request.getPaymentType().toUpperCase()))
+                .transactionCode(generateTransactionCode())
+                .notes(request.getNotes())
+                .callbackReceived(false)
+                .gatewayResponse("Pending M-Pesa STK Push") // Set default to avoid NOT NULL constraint
+                .build();
+        
+        Payment savedPayment = paymentRepository.save(payment);
+        log.info("Payment created with transaction code: {}", savedPayment.getTransactionCode());
+        
+        // Initiate M-Pesa STK push if payment method is MPESA
+        if ("MPESA".equalsIgnoreCase(request.getPaymentMethod())) {
+            try {
+                MpesaStkRequest stkRequest = MpesaStkRequest.builder()
+                        .tenantId(tenant.getId())
+                        .phoneNumber(formattedPhone)
+                        .amount(amount)
+                        .transactionCode(savedPayment.getTransactionCode())
+                        .accountReference("LEASE-" + lease.getId())
+                        .build();
+                
+                mpesaService.initiateStkPush(stkRequest);
+                savedPayment.setStatus(PaymentStatus.PROCESSING);
+                paymentRepository.save(savedPayment);
+                log.info("M-Pesa STK push initiated successfully for payment: {}", savedPayment.getId());
+                
+            } catch (Exception e) {
+                log.error("Failed to initiate M-Pesa STK push: {}", e.getMessage());
+                savedPayment.setStatus(PaymentStatus.FAILED);
+                savedPayment.setNotes("M-Pesa initiation failed: " + e.getMessage());
+                paymentRepository.save(savedPayment);
+            }
+        } else if ("CARD".equalsIgnoreCase(request.getPaymentMethod()) || "CREDIT_CARD".equalsIgnoreCase(request.getPaymentMethod())) {
+             try {
+                 if (request.getPaymentToken() == null || request.getPaymentToken().isEmpty()) {
+                     throw new BadRequestException("Payment token is required for card payments");
+                 }
+
+                 String description = "Rent Payment for " + lease.getProperty().getTitle();
+                 String transactionId = stripeService.charge(
+                         request.getPaymentToken(),
+                         amount,
+                         "kes", // Ensure currency matches your Stripe account settings (using KES as per project context)
+                         description
+                 );
+
+                 savedPayment.setStatus(PaymentStatus.SUCCESSFUL);
+                 savedPayment.setTransactionCode(transactionId);
+                 savedPayment.setPaidAt(LocalDateTime.now());
+                 savedPayment.setGatewayResponse("Stripe Charge ID: " + transactionId);
+                 paymentRepository.save(savedPayment);
+                 
+                 log.info("Stripe payment successful. Transaction ID: {}", transactionId);
+
+                 // ========== PROPERTY BOOKING LOGIC ==========
+                 // If deposit or full payment is successful, mark deposit as paid and book property
+                 if (savedPayment.getPaymentType() == DEPOSIT ||
+                     savedPayment.getPaymentType() == FULL_AMOUNT) {
+                     if (savedPayment.getLease() != null) {
+                         Lease paymentLease = savedPayment.getLease();
+                         paymentLease.setDepositPaid(true);
+                         paymentLease.setStatus(LeaseStatus.ACTIVE); // Activate the lease
+                         leaseRepository.save(paymentLease);
+                         log.info("Marked deposit as paid and activated lease: {}", paymentLease.getId());
+                         
+                         // Mark property as unavailable (booked)
+                         Property property = paymentLease.getProperty();
+                         if (property != null) {
+                             property.setAvailable(false);
+                             propertyRepository.save(property);
+                             log.info("Marked property {} as unavailable (booked)", property.getId());
+                         }
+                     }
+                 }
+
+             } catch (Exception e) {
+                 log.error("Failed to initiate Stripe payment: {}", e.getMessage());
+                 savedPayment.setStatus(PaymentStatus.FAILED);
+                 savedPayment.setNotes("Stripe payment failed: " + e.getMessage());
+                 paymentRepository.save(savedPayment);
+                 // We might want to rethrow to notify frontend immediately
+                 throw new BadRequestException("Card payment failed: " + e.getMessage());
+             }
+        }
+        
+        return PaymentResponse.fromEntity(savedPayment);
     }
 
     @Scheduled(fixedDelay = 300000) // Run every 5 minutes

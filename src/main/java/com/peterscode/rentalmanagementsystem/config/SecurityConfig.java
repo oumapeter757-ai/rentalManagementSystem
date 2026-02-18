@@ -45,7 +45,6 @@ public class SecurityConfig {
     private final JwtService jwtService;
     private final UserDetailsServiceImpl userDetailsService;
 
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         JwtAuthFilter jwtFilter = new JwtAuthFilter(jwtService, userDetailsService);
@@ -56,118 +55,140 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
 
-                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                .requestMatchers("/api/auth/**").permitAll()
-                                .requestMatchers("/api/public/**").permitAll()
-                                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasRole("ADMIN")
 
-                                .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.PATCH, "/api/users/**").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register/admin").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register/tenant").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register/landlord").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/verify-email").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/resend-verification").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/reset-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/admin-exists").permitAll()
 
+                        // Property Image endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/properties/*/images").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/properties/*/images/count").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/properties/*/images").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/properties/*/images/multiple")
+                        .hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/properties/*/images").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/properties/*/images/*")
+                        .hasAnyRole("LANDLORD", "ADMIN")
 
-                                .requestMatchers(HttpMethod.POST, "/api/auth/register/admin").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/register/tenant").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/register/landlord").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                                .requestMatchers(HttpMethod.GET, "/api/auth/verify-email").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/resend-verification").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/reset-password").permitAll()
-                                .requestMatchers(HttpMethod.GET, "/api/auth/admin-exists").permitAll()
+                        // Property CRUD operations
+                        .requestMatchers(HttpMethod.POST, "/api/properties").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/properties/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/properties/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/properties").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/properties/*").permitAll()
 
-// Property Image endpoints
-                                .requestMatchers(HttpMethod.GET, "/api/properties/*/images").permitAll()
-                                .requestMatchers(HttpMethod.GET, "/api/properties/*/images/count").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/properties/*/images").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.POST, "/api/properties/*/images/multiple").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.DELETE, "/api/properties/*/images").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.DELETE, "/api/properties/*/images/*").hasAnyRole("LANDLORD", "ADMIN")
+                        // Payment endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/{id}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/transaction/{transactionCode}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/payments").hasAnyRole("ADMIN", "LANDLORD") // SECURITY
+                                                                                                          // FIX: Allow
+                                                                                                          // landlords
+                        .requestMatchers(HttpMethod.GET, "/api/payments/status/{status}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/method/{method}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/mpesa/pending").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/summary").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/revenue/total").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/revenue/tenant/{tenantId}")
+                        .hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/{id}/success").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/{id}/pending").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/generate-transaction-code")
+                        .hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.GET, "/api/payments/tenant/{tenantId}")
+                        .hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payments/{id}").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.PUT, "/api/payments/{id}/status").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payments/{id}/mark-paid").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/{id}/reverse").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/{id}/refund").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/query-status").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/payments/{id}").authenticated()
 
-// Property CRUD operations
-                                .requestMatchers(HttpMethod.POST, "/api/properties").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.PUT, "/api/properties/*").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.DELETE, "/api/properties/*").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/properties").permitAll()
-                                .requestMatchers(HttpMethod.GET, "/api/properties/*").permitAll()
+                        // M-Pesa endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/stk-push").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/callback").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/validation").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/confirmation").permitAll()
 
-// Payment endpoints
-                                .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("TENANT", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/{id}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/payments/transaction/{transactionCode}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/payments").hasAnyRole("ADMIN", "LANDLORD")  // SECURITY FIX: Allow landlords
-                                .requestMatchers(HttpMethod.GET, "/api/payments/status/{status}").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/method/{method}").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/mpesa/pending").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/summary").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/revenue/total").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/revenue/tenant/{tenantId}").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/{id}/success").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/payments/{id}/pending").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/payments/generate-transaction-code").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.GET, "/api/payments/tenant/{tenantId}").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.PUT, "/api/payments/{id}").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.PUT, "/api/payments/{id}/status").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.PUT, "/api/payments/{id}/mark-paid").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.POST, "/api/payments/{id}/reverse").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.POST, "/api/payments/{id}/refund").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/query-status").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.DELETE, "/api/payments/{id}").authenticated()
+                        // Lease endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/leases").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/property/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/property/*/active")
+                        .hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/leases/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/leases").hasAnyRole("LANDLORD", "ADMIN") // SECURITY FIX:
+                                                                                                        // Allow
+                                                                                                        // landlords
+                        .requestMatchers(HttpMethod.PUT, "/api/leases/*/terminate")
+                        .hasAnyRole("LANDLORD", "ADMIN", "TENANT")
 
-// M-Pesa endpoints
-                                .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/stk-push").hasAnyRole("TENANT", "ADMIN")
-                                .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/callback").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/validation").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/payments/mpesa/confirmation").permitAll()
+                        // Rental Application endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/applications").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/my-applications")
+                        .hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/my-properties")
+                        .hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/property/*").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/status/*")
+                        .hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/status").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel").hasAnyRole("TENANT", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/count/status/*")
+                        .hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/pending").hasAnyRole("LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications/*")
+                        .hasAnyRole("TENANT", "LANDLORD", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/applications").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/applications/*").hasRole("ADMIN")
 
-// Lease endpoints
-                                .requestMatchers(HttpMethod.POST, "/api/leases").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/leases/me").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/leases/property/*").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/leases/property/*/active").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/leases/*").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/leases").hasAnyRole("LANDLORD", "ADMIN")  // SECURITY FIX: Allow landlords
-                                .requestMatchers(HttpMethod.PUT, "/api/leases/*/terminate").hasAnyRole("LANDLORD", "ADMIN", "TENANT")
+                        // Maintenance endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/maintenance").hasRole("TENANT")
+                        .requestMatchers(HttpMethod.POST, "/api/maintenance/*/images").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/me").hasRole("TENANT")
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/{id}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/status/{status}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/category/{category}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/priority/{priority}").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/open").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/open/count").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}/status").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}/assign").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}/notes").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/summary").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/summary/me").hasRole("TENANT")
+                        .requestMatchers(HttpMethod.DELETE, "/api/maintenance/{id}").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/maintenance/{requestId}/images/{imageId}")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/{id}/accessible").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/maintenance/{id}/can-update").authenticated()
 
-// Rental Application endpoints
-                                .requestMatchers(HttpMethod.POST, "/api/applications").hasAnyRole("TENANT", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/my-applications").hasAnyRole("TENANT", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/my-properties").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/property/*").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/status/*").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.PUT, "/api/applications/*/status").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel").hasAnyRole("TENANT", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/count/status/*").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/pending").hasAnyRole("LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications/*").hasAnyRole("TENANT", "LANDLORD", "ADMIN")
-                                .requestMatchers(HttpMethod.GET, "/api/applications").hasRole("ADMIN")
-                                .requestMatchers(HttpMethod.DELETE, "/api/applications/*").hasRole("ADMIN")
+                        // Messaging endpoints — all authenticated users can message
+                        .requestMatchers("/api/messages/**").authenticated()
 
-// Maintenance endpoints
-                                .requestMatchers(HttpMethod.POST, "/api/maintenance").hasRole("TENANT")
-                                .requestMatchers(HttpMethod.POST, "/api/maintenance/*/images").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/me").hasRole("TENANT")
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/{id}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/status/{status}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/category/{category}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/priority/{priority}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/open").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/open/count").authenticated()
-                                .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}").authenticated()
-                                .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}/status").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}/assign").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.PUT, "/api/maintenance/{id}/notes").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/summary").hasAnyRole("ADMIN", "LANDLORD")
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/summary/me").hasRole("TENANT")
-                                .requestMatchers(HttpMethod.DELETE, "/api/maintenance/{id}").authenticated()
-                                .requestMatchers(HttpMethod.DELETE, "/api/maintenance/{requestId}/images/{imageId}").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/{id}/accessible").authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/maintenance/{id}/can-update").authenticated()
+                        // Booking endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/me").hasRole("TENANT")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings").hasAnyRole("ADMIN", "LANDLORD")
 
                         .requestMatchers(
                                 "/",
@@ -180,21 +201,21 @@ public class SecurityConfig {
                                 "/static/**",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/error"
-                        ).permitAll()
+                                "/error")
+                        .permitAll()
 
                         .requestMatchers("/uploads/**").permitAll()
-                        .requestMatchers("/api/**").authenticated()
 
+                        // Audit Logs - Admin only
+                        .requestMatchers("/api/audit-logs/**").hasRole("ADMIN")
+
+                        .requestMatchers("/api/**").authenticated()
 
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/landlord/**").hasAnyRole("LANDLORD", "ADMIN")
                         .requestMatchers("/api/tenant/**").hasAnyRole("TENANT", "ADMIN")
 
-
-                        .anyRequest().authenticated()
-                )
-
+                        .anyRequest().authenticated())
 
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
@@ -219,7 +240,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-
     @Component
     static class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -233,15 +253,14 @@ public class SecurityConfig {
 
         @Override
         protected void doFilterInternal(HttpServletRequest request,
-                                        HttpServletResponse response,
-                                        FilterChain chain) throws IOException, jakarta.servlet.ServletException {
+                HttpServletResponse response,
+                FilterChain chain) throws IOException, jakarta.servlet.ServletException {
 
             String header = request.getHeader("Authorization");
             if (header != null && header.startsWith("Bearer ")) {
                 String token = header.substring(7);
                 if (jwtService.validate(token)) {
                     String email = jwtService.getEmail(token).trim().toLowerCase();
-
 
                     UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
@@ -257,6 +276,5 @@ public class SecurityConfig {
             chain.doFilter(request, response);
         }
     }
-
 
 }

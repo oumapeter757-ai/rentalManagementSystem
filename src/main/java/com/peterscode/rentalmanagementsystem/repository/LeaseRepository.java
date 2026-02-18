@@ -2,6 +2,8 @@ package com.peterscode.rentalmanagementsystem.repository;
 
 import com.peterscode.rentalmanagementsystem.model.lease.Lease;
 import com.peterscode.rentalmanagementsystem.model.lease.LeaseStatus;
+import com.peterscode.rentalmanagementsystem.model.property.Property;
+import com.peterscode.rentalmanagementsystem.model.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -18,4 +20,6 @@ public interface LeaseRepository extends JpaRepository<Lease, Long> {
 
 
     List<Lease> findByProperty_IdAndStatus(Long propertyId, LeaseStatus status);
+
+    List<Lease> findByPropertyAndTenant(Property property, User tenant);
 }

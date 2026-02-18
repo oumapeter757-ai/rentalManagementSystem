@@ -45,6 +45,9 @@ public class Lease {
     @Column(name = "deposit", precision = 19, scale = 2)
     private BigDecimal deposit;
 
+    @Column(name = "deposit_paid")
+    private Boolean depositPaid = false;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private LeaseStatus status;

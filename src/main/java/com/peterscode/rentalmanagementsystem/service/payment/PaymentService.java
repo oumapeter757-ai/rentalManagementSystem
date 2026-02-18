@@ -1,8 +1,10 @@
 package com.peterscode.rentalmanagementsystem.service.payment;
 
 import com.peterscode.rentalmanagementsystem.dto.request.MpesaStkRequest;
+import com.peterscode.rentalmanagementsystem.dto.request.PaymentInitiationRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
+import com.peterscode.rentalmanagementsystem.dto.response.PaymentOptionResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PaymentSummaryResponse;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,4 +42,8 @@ public interface PaymentService {
     PaymentResponse reversePayment(Long id, String reversalReason, String callerEmail);
     PaymentResponse refundPayment(Long id, BigDecimal refundAmount, String reason, String callerEmail);
     void queryMpesaTransactionStatus(String checkoutRequestId);
+
+    // Tenant payment initiation methods
+    List<PaymentOptionResponse> getPaymentOptions(Long leaseId, String callerEmail);
+    PaymentResponse initiatePayment(PaymentInitiationRequest request, String callerEmail);
 }

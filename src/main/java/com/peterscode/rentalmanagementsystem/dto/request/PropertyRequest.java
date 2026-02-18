@@ -19,6 +19,7 @@ public class PropertyRequest {
     private String address;
 
     private double rent;
+    private Double depositAmount;
     private Integer bedrooms;
 
     private PropertyType type;

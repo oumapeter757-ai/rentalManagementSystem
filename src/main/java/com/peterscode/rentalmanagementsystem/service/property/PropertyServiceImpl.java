@@ -52,6 +52,7 @@ public class PropertyServiceImpl implements PropertyService {
                 .address(request.getAddress())
                 .location(request.getAddress())
                 .rentAmount(BigDecimal.valueOf(request.getRent()))
+                .depositAmount(request.getDepositAmount() != null ? BigDecimal.valueOf(request.getDepositAmount()) : BigDecimal.valueOf(request.getRent())) // Default to rent if null
                 .type(request.getType())
                 .bedrooms(request.getBedrooms())
                 .bathrooms(request.getBathrooms())
@@ -141,6 +142,9 @@ public class PropertyServiceImpl implements PropertyService {
         property.setAddress(request.getAddress());
         property.setLocation(request.getAddress());
         property.setRentAmount(BigDecimal.valueOf(request.getRent()));
+        if (request.getDepositAmount() != null) {
+            property.setDepositAmount(BigDecimal.valueOf(request.getDepositAmount()));
+        }
         property.setType(request.getType());
         property.setBedrooms(request.getBedrooms());
         property.setBathrooms(request.getBathrooms());
@@ -216,7 +220,8 @@ public class PropertyServiceImpl implements PropertyService {
                 .description(property.getDescription())
                 .address(property.getAddress())
                 .location(property.getLocation())
-                .rent(property.getRentAmount().doubleValue())
+                .rent(property.getRentAmount() != null ? property.getRentAmount().doubleValue() : 0.0)
+                .depositAmount(property.getDepositAmount() != null ? property.getDepositAmount().doubleValue() : 0.0)
                 .type(property.getType())
                 .bedrooms(property.getBedrooms())
                 .bathrooms(property.getBathrooms())
@@ -224,6 +229,7 @@ public class PropertyServiceImpl implements PropertyService {
                 .available(property.getAvailable())
                 .amenities(property.getAmenities())
                 .size(property.getSize())
+                .mainImageUrl(property.getMainImageUrl())
                 .ownerId(String.valueOf(property.getOwner().getId()))
                 .ownerEmail(property.getOwner().getEmail())
                 .imageUrls(property.getImages() != null ?
@@ -245,7 +251,8 @@ public class PropertyServiceImpl implements PropertyService {
                 .description(property.getDescription())
                 .address(property.getAddress())
                 .location(property.getLocation())
-                .rent(property.getRentAmount().doubleValue())
+                .rent(property.getRentAmount() != null ? property.getRentAmount().doubleValue() : 0.0)
+                .depositAmount(property.getDepositAmount() != null ? property.getDepositAmount().doubleValue() : 0.0)
                 .type(property.getType())
                 .bedrooms(property.getBedrooms())
                 .bathrooms(property.getBathrooms())
@@ -253,6 +260,7 @@ public class PropertyServiceImpl implements PropertyService {
                 .available(property.getAvailable())
                 .amenities(property.getAmenities())
                 .size(property.getSize())
+                .mainImageUrl(property.getMainImageUrl())
                 .imageUrls(property.getImages() != null ?
                         property.getImages().stream()
                                 .map(PropertyImage::getFileUrl)

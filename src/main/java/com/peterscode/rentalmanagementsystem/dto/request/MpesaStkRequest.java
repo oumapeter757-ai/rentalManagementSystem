@@ -1,11 +1,13 @@
 package com.peterscode.rentalmanagementsystem.dto.request;
 
 import jakarta.validation.constraints.*;
+import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
 
 @Data
+@Builder
 public class MpesaStkRequest {
 
     @NotNull(message = "Tenant ID is required")
@@ -22,4 +24,8 @@ public class MpesaStkRequest {
 
     @Size(max = 1000, message = "Description cannot exceed 1000 characters")
     private String description;
+
+    private String transactionCode;
+
+    private String accountReference;
 }

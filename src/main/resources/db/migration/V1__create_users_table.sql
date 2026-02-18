@@ -11,7 +11,8 @@ CREATE TABLE users (
                        phone_number VARCHAR(100),
                        role VARCHAR(20) NOT NULL,
                        enabled BOOLEAN DEFAULT TRUE,
-                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 2. Create email_verification_tokens (depends on users)

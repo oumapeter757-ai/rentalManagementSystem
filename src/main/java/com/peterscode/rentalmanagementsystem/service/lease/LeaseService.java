@@ -13,4 +13,5 @@ public interface LeaseService {
     LeaseResponse terminateLease(Long id, String callerEmail, String reason);
     List<LeaseResponse> getActiveLeasesForProperty(Long propertyId);
     List<LeaseResponse> getAllLeases(String callerEmail); // Admin - get all leases, Landlord - get leases for owned properties
+    List<LeaseResponse> getMyLeases(String callerEmail); // Tenant - get own leases
 }

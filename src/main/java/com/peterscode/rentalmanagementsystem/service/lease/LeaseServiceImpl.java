@@ -169,4 +169,18 @@ public class LeaseServiceImpl implements LeaseService {
         // Other roles see no leases
         return List.of();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LeaseResponse> getMyLeases(String callerEmail) {
+        User caller = userRepository.findByEmailIgnoreCase(callerEmail)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        // Get leases where the caller is the tenant
+        return leaseRepository.findAll()
+                .stream()
+                .filter(lease -> lease.getTenant().getId().equals(caller.getId()))
+                .map(LeaseMapper::toResponse)
+                .collect(Collectors.toList());
+    }
 }

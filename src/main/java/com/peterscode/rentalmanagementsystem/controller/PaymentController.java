@@ -59,6 +59,20 @@ public class PaymentController {
         );
     }
 
+    @PostMapping("/initiate")
+    @PreAuthorize("hasAnyRole('TENANT', 'ADMIN')")
+    @Operation(summary = "Initiate a new payment (Deposit/Full)")
+    public ResponseEntity<ApiResponse<PaymentResponse>> initiatePayment(
+            Authentication authentication,
+            @Valid @RequestBody com.peterscode.rentalmanagementsystem.dto.request.PaymentInitiationRequest request) {
+
+        String callerEmail = authentication.getName();
+        PaymentResponse response = paymentService.initiatePayment(request, callerEmail);
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment initiated successfully", response)
+        );
+    }
+
 
 
     @GetMapping("/{id}")
@@ -302,6 +316,20 @@ public class PaymentController {
         boolean isPending = paymentService.isPaymentPending(id);
         return ResponseEntity.ok(
                 ApiResponse.ok("Payment pending status checked", isPending)
+        );
+    }
+
+    @GetMapping("/{id}/status")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get payment status")
+    public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentStatus(@PathVariable Long id) {
+        // We can reuse PaymentResponse or create a smaller DTO. 
+        // For now, let's return the full PaymentResponse as it contains the status.
+        PaymentResponse payment = paymentService.getPaymentById(id);
+        // But the frontend expects a simple status object or the full object.
+        // paymentService.js expect response.data.
+        return ResponseEntity.ok(
+                ApiResponse.ok("Payment status fetched", payment) 
         );
     }
 

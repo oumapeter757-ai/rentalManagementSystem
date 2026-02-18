@@ -18,6 +18,8 @@ public class PropertyResponse {
     private String location;
     private String address;
     private double rent;
+    private double depositAmount;
+    private double amount;
     private PropertyType type;
 
     private Integer bedrooms;

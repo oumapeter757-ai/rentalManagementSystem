@@ -1,11 +1,13 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: rental-management-system
 
   datasource:
     url: jdbc:mysql://localhost:3306/rental_management?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: peter
-    password: peter
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -23,14 +25,13 @@ spring:
     locations: classpath:db/migration
     clean-disabled: true
     out-of-order: true
-    validate-on-migrate: false  # Change to false temporarily
+    validate-on-migrate: false
 
-  # MAIL CONFIGURATION
   mail:
     host: smtp.gmail.com
     port: 465
-    username: ${EMAIL_USERNAME:oumapeter757@gmail.com}
-    password: ${EMAIL_PASSWORD:cnel xuht zxfd msrk }  # REMOVED SPACE AT END
+    username: ${EMAIL_USERNAME}
+    password: ${EMAIL_PASSWORD}
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -38,7 +39,7 @@ spring:
         smtp:
           auth: true
           ssl:
-            enable: true  # REQUIRED for port 465
+            enable: true
           connectiontimeout: 10000
           timeout: 10000
           writetimeout: 10000
@@ -59,12 +60,10 @@ spring:
     resources:
       static-locations: classpath:/static/,file:./uploads/
 
-# REMOVE the management section from here
-
 app:
   frontend-url: https://halfhearted-shavonda-unedificial.ngrok-free.dev
   cors:
-    allowed-origins: http://localhost:8000,http://localhost:3000,http://localhost:5500,http://127.0.0.1:8000,http://127.0.0.1:3000,http://127.0.0.1:5500,http://localhost:5173,http://localhost:5174
+    allowed-origins: http://localhost:8000,http://localhost:3000,http://localhost:5500,http://127.0.0.1:8000,http://127.0.0.1:3000,http://127.0.0.1:5500,http://localhost:5173,http://localhost:5174,https://halfhearted-shavonda-unedificial.ngrok-free.dev
     allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD
     allowed-headers: "*"
     expose-headers: Authorization,Content-Disposition
@@ -74,20 +73,34 @@ app:
   upload-dir: ./uploads
 
   verification:
-    url: http://localhost:5173/verify-email
+    verify-url: ${app.frontend-url}/verify-email
+
+  testing:
+    auto-verify-email: true
+
 jwt:
-  secret: b61eb47178bc3fc9fedd50fecb3f12416e0cc2fe3c37df6a809c2d7f33a060fb5398cab8d664a88c88fca90c8e5d9c6ce41e42e14e9919b980975b8dd4c56a5e
-  expiration-ms: 86400000 # 24 hours
+  secret: ${JWT_SECRET}
+  expiration-ms: 86400000
 
 mpesa:
-  consumer-key: "84vsrJkA3kETbeAbJLHSYsuy6QjsBtfEwNQKoJv6XnP4sWV3"
-  consumer-secret: "ysF5BOiGsNSXhvezFBVSGomUEG881l4OboDyYZYlv5pNZXbG8YrVv6KOEgAqSgYt"
-  passkey: "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
-  shortcode: "174379"
+  consumer-key: ${MPESA_CONSUMER_KEY}
+  consumer-secret: ${MPESA_CONSUMER_SECRET}
+  passkey: ${MPESA_PASSKEY}
+  shortcode: "174379" # Public, safe to keep
   stk-push-url: "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
   auth-url: "https://sandbox.safaricom.co.ke/oauth/v1/generate"
-  callback-url: "https://halfhearted-shavonda-unedificial.ngrok-free.dev/api/payments/mpesa/callback"
+  callback-url: ${MPESA_CALLBACK_URL}
   environment: "sandbox"
+
+stripe:
+  api:
+    key: ${STRIPE_SECRET_KEY}
+    public-key: ${STRIPE_PUBLISHABLE_KEY}
+
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID}
+  auth-token: ${TWILIO_AUTH_TOKEN}
+  phone-number: ${TWILIO_PHONE_NUMBER}
 
 server:
   port: 8080
@@ -96,7 +109,6 @@ server:
     mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
     min-response-size: 1024
 
-# MOVE management section HERE - at root level
 management:
   endpoints:
     web:
@@ -110,7 +122,7 @@ management:
       enabled: true
   health:
     mail:
-      enabled: false  # CRITICAL: Disable mail health check
+      enabled: false
 
 logging:
   level:

@@ -57,6 +57,9 @@ public class Property {
     @Column(nullable = false)
     private Boolean available = true;
 
+    @Column(name = "deposit_amount", precision = 19, scale = 2)
+    private BigDecimal depositAmount;
+
 
 
     @Column
@@ -100,5 +103,13 @@ public class Property {
     public void removeImage(PropertyImage image) {
         images.remove(image);
         image.setProperty(null);
+    }
+
+    public String getStatus() {
+        return Boolean.TRUE.equals(available) ? "AVAILABLE" : "RENTED";
+    }
+
+    public boolean isAvailable() {
+        return Boolean.TRUE.equals(available);
     }
 }

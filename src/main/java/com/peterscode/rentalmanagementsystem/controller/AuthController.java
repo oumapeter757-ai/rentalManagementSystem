@@ -138,8 +138,7 @@ public class AuthController {
         boolean isValid = authService.validateResetCode(request.getCode());
         return ResponseEntity.ok(ApiResponse.success(
                 "Reset code is valid",
-                isValid
-        ));
+                isValid));
     }
 
     @PostMapping("/reset-password")
@@ -150,7 +149,18 @@ public class AuthController {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.success(
                 "Password reset successfully",
-                null
-        ));
+                null));
+    }
+
+    @GetMapping("/validate-token")
+    @Operation(summary = "Validate JWT token and return user info")
+    public ResponseEntity<ApiResponse<JwtResponse>> validateToken(
+            org.springframework.security.core.Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid or expired token"));
+        }
+        String email = authentication.getName();
+        JwtResponse userInfo = authService.getUserInfoByEmail(email);
+        return ResponseEntity.ok(ApiResponse.success("Token is valid", userInfo));
     }
 }

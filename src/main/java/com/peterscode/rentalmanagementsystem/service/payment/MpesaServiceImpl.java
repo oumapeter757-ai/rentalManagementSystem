@@ -2,6 +2,7 @@ package com.peterscode.rentalmanagementsystem.service.payment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peterscode.rentalmanagementsystem.config.MpesaConfig;
+import com.peterscode.rentalmanagementsystem.dto.request.MpesaStkRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaStkResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.MpesaTransactionStatusResponse;
 import lombok.RequiredArgsConstructor;
@@ -141,6 +142,23 @@ public class MpesaServiceImpl implements MpesaService {
             log.error("Error generating password: {}", e.getMessage());
             throw new RuntimeException("Failed to generate password", e);
         }
+    }
+
+    @Override
+    public void initiateStkPush(MpesaStkRequest stkRequest) {
+        log.info("Initiating STK Push with request: tenantId={}, amount={}", 
+                stkRequest.getTenantId(), stkRequest.getAmount());
+        
+        // Delegate to the main initiateStkPush method
+        String description = stkRequest.getDescription() != null ? 
+                stkRequest.getDescription() : "Payment - " + stkRequest.getAccountReference();
+        
+        initiateStkPush(
+                stkRequest.getPhoneNumber(),
+                stkRequest.getAmount(),
+                stkRequest.getAccountReference(),
+                description
+        );
     }
 
     @Override

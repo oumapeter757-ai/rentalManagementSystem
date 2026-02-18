@@ -44,9 +44,20 @@ public class Payment {
     @Column(nullable = false, length = 20)
     private PaymentStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_type", length = 20)
+    private PaymentType paymentType;
+
     // M-Pesa STK push transaction code or reference
     @Column(name = "transaction_code", unique = true)
     private String transactionCode;
+
+    // M-Pesa STK Push tracking IDs
+    @Column(name = "checkout_request_id")
+    private String checkoutRequestID;
+
+    @Column(name = "merchant_request_id")
+    private String merchantRequestID;
 
     // Gateway response from MPESA callback
     @Lob
