@@ -8,5 +8,7 @@ public enum EntityType {
     APPLICATION,
     MAINTENANCE_REQUEST,
     DOCUMENT,
+    MESSAGE,
+    BOOKING,
     SYSTEM
 }

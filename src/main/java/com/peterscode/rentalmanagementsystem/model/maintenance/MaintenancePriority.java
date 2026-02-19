@@ -1,10 +1,5 @@
 package com.peterscode.rentalmanagementsystem.model.maintenance;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
-@Getter
-@RequiredArgsConstructor
 public enum MaintenancePriority {
     LOW("Low", "Non-urgent, can be scheduled"),
     MEDIUM("Medium", "Should be addressed soon"),
@@ -14,4 +9,17 @@ public enum MaintenancePriority {
 
     private final String displayName;
     private final String description;
+
+    MaintenancePriority(String displayName, String description) {
+        this.displayName = displayName;
+        this.description = description;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public String getDescription() {
+        return description;
+    }
 }

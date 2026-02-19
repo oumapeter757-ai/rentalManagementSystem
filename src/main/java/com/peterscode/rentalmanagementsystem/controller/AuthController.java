@@ -12,12 +12,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.ui.Model;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 
 @Slf4j
 @RestController
@@ -93,26 +91,19 @@ public class AuthController {
 
     @GetMapping("/verify-email")
     @Operation(summary = "Verify email with token")
-    public String verifyEmail(@RequestParam String token, Model model) {
+    public ResponseEntity<ApiResponse<Boolean>> verifyEmail(@RequestParam String token) {
         try {
             boolean verified = authService.verifyEmail(token);
 
-            model.addAttribute("success", verified);
-            model.addAttribute("frontendUrl", frontendUrl);
-            model.addAttribute("currentYear", LocalDateTime.now().getYear());
-
-            if (!verified) {
-                model.addAttribute("message", "The verification token is invalid or has expired.");
+            if (verified) {
+                return ResponseEntity.ok(ApiResponse.success("Email verified successfully! You can now log in.", true));
+            } else {
+                return ResponseEntity.badRequest().body(ApiResponse.error("Verification failed. The token may be invalid."));
             }
 
-            return "verification-result";
-
         } catch (Exception e) {
-            model.addAttribute("success", false);
-            model.addAttribute("message", e.getMessage());
-            model.addAttribute("frontendUrl", frontendUrl);
-            model.addAttribute("currentYear", LocalDateTime.now().getYear());
-            return "verification-result";
+            log.error("Email verification failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
 

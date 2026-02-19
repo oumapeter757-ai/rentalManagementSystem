@@ -3,12 +3,15 @@ package com.peterscode.rentalmanagementsystem.service.property;
 import com.peterscode.rentalmanagementsystem.dto.request.PropertyRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.PropertyResponse;
 import com.peterscode.rentalmanagementsystem.dto.response.PublicPropertyResponse;
+import com.peterscode.rentalmanagementsystem.model.audit.AuditAction;
+import com.peterscode.rentalmanagementsystem.model.audit.EntityType;
 import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.property.PropertyImage;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.PropertyRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
+import com.peterscode.rentalmanagementsystem.service.audit.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +27,7 @@ public class PropertyServiceImpl implements PropertyService {
 
     private final PropertyRepository propertyRepository;
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
     @Override
     @Transactional
@@ -64,13 +68,12 @@ public class PropertyServiceImpl implements PropertyService {
                 .build();
 
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
-            List<PropertyImage> images = request.getImageUrls().stream()
-                    .map(url -> PropertyImage.builder()
+            request.getImageUrls().forEach(url -> property.addImage(
+                    PropertyImage.builder()
                             .fileUrl(url)
                             .property(property)
-                            .build())
-                    .toList();
-            property.setImages(images);
+                            .build()
+            ));
         }
 
         propertyRepository.save(property);
@@ -154,19 +157,15 @@ public class PropertyServiceImpl implements PropertyService {
         property.setAvailable(request.getAvailable() != null ? request.getAvailable() : true);
 
 
-        if (property.getImages() != null) {
-            property.getImages().clear();
-        }
+        property.getImages().clear();
 
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
-            property.setImages(
-                    request.getImageUrls().stream()
-                            .map(url -> PropertyImage.builder()
-                                    .fileUrl(url)
-                                    .property(property)
-                                    .build())
-                            .toList()
-            );
+            request.getImageUrls().forEach(url -> property.addImage(
+                    PropertyImage.builder()
+                            .fileUrl(url)
+                            .property(property)
+                            .build()
+            ));
         }
 
         propertyRepository.save(property);
@@ -182,12 +181,23 @@ public class PropertyServiceImpl implements PropertyService {
 
         if (currentUser.getRole() == Role.LANDLORD &&
                 !property.getOwner().getId().equals(currentUser.getId())) {
+            auditLogService.log(AuditAction.ACCESS_DENIED, EntityType.PROPERTY, propertyId,
+                    String.format("Landlord %s attempted to delete property owned by another user", callerEmail),
+                    "FAILURE");
             throw new RuntimeException("LANDLORD cannot delete properties they do NOT own");
         }
 
         if (currentUser.getRole() == Role.TENANT) {
+            auditLogService.log(AuditAction.ACCESS_DENIED, EntityType.PROPERTY, propertyId,
+                    String.format("Tenant %s attempted to delete property", callerEmail),
+                    "FAILURE");
             throw new RuntimeException("TENANT cannot delete properties");
         }
+
+        // Log successful deletion
+        auditLogService.log(AuditAction.DELETE, EntityType.PROPERTY, propertyId,
+                String.format("Property '%s' deleted by %s (role: %s)",
+                        property.getTitle(), callerEmail, currentUser.getRole()));
 
         propertyRepository.delete(property);
     }

@@ -28,12 +28,16 @@ public class MessageService {
     /**
      * Send a message from one user to another.
      * Automatically determines conversation type based on roles.
+     * Enforces security: Tenants can only message Landlords, Landlords can message Tenants/Admins, Admins can message Landlords
      */
     public Map<String, Object> sendMessage(Long senderId, Long receiverId, String content) {
         User sender = userRepository.findById(senderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sender not found"));
         User receiver = userRepository.findById(receiverId)
                 .orElseThrow(() -> new ResourceNotFoundException("Receiver not found"));
+
+        // Enforce messaging rules
+        validateMessagingPermissions(sender, receiver);
 
         ConversationType type = determineConversationType(sender, receiver);
 
@@ -48,6 +52,36 @@ public class MessageService {
         Message saved = messageRepository.save(message);
         log.info("Message sent from {} to {} (type: {})", sender.getEmail(), receiver.getEmail(), type);
         return toMessageMap(saved);
+    }
+
+    /**
+     * Validate that the sender is allowed to message the receiver
+     */
+    private void validateMessagingPermissions(User sender, User receiver) {
+        // Tenants can only message Landlords
+        if (sender.getRole() == Role.TENANT) {
+            if (receiver.getRole() != Role.LANDLORD) {
+                throw new IllegalArgumentException("Tenants can only send messages to Landlords");
+            }
+        }
+
+        // Landlords can message Tenants and Admins
+        else if (sender.getRole() == Role.LANDLORD) {
+            if (receiver.getRole() != Role.TENANT && receiver.getRole() != Role.ADMIN) {
+                throw new IllegalArgumentException("Landlords can only send messages to Tenants or Admins");
+            }
+        }
+
+        // Admins can message Landlords
+        else if (sender.getRole() == Role.ADMIN) {
+            if (receiver.getRole() != Role.LANDLORD) {
+                throw new IllegalArgumentException("Admins can only send messages to Landlords");
+            }
+        }
+
+        else {
+            throw new IllegalArgumentException("Invalid user role for messaging");
+        }
     }
 
     /**

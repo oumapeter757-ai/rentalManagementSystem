@@ -1,6 +1,8 @@
 package com.peterscode.rentalmanagementsystem.model.payment;
 
+import com.peterscode.rentalmanagementsystem.config.EntityAuditListener;
 import com.peterscode.rentalmanagementsystem.model.lease.Lease;
+import com.peterscode.rentalmanagementsystem.model.property.Property;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -9,6 +11,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "payments")
+@EntityListeners(EntityAuditListener.class)
 @Data
 @Builder
 @NoArgsConstructor
@@ -29,6 +32,9 @@ public class Payment {
     @JoinColumn(name = "lease_id")
     private Lease lease;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "property_id")
+    private Property property;
 
     @Column(name = "phone_number", length = 13)
     private String phoneNumber;

@@ -1,6 +1,7 @@
 package com.peterscode.rentalmanagementsystem.model.user;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.peterscode.rentalmanagementsystem.config.EntityAuditListener;
 import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
 import com.peterscode.rentalmanagementsystem.model.property.Property;
 import jakarta.persistence.*;
@@ -11,6 +12,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "users")
+@EntityListeners(EntityAuditListener.class)
 @Getter
 @Setter
 @NoArgsConstructor

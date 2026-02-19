@@ -1,5 +1,6 @@
 package com.peterscode.rentalmanagementsystem.service.payment;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.peterscode.rentalmanagementsystem.dto.request.MpesaStkRequest;
@@ -8,6 +9,8 @@ import com.peterscode.rentalmanagementsystem.dto.request.PaymentRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.*;
 import com.peterscode.rentalmanagementsystem.exception.BadRequestException;
 import com.peterscode.rentalmanagementsystem.exception.ResourceNotFoundException;
+import com.peterscode.rentalmanagementsystem.model.audit.AuditAction;
+import com.peterscode.rentalmanagementsystem.model.audit.EntityType;
 import com.peterscode.rentalmanagementsystem.model.payment.Payment;
 import com.peterscode.rentalmanagementsystem.model.payment.PaymentMethod;
 import com.peterscode.rentalmanagementsystem.model.payment.PaymentStatus;
@@ -22,6 +25,7 @@ import com.peterscode.rentalmanagementsystem.repository.PaymentRepository;
 import com.peterscode.rentalmanagementsystem.repository.PropertyRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
 
+import com.peterscode.rentalmanagementsystem.service.audit.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -49,6 +53,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final MpesaService mpesaService;
     private final StripeService stripeService; // Inject StripeService
     private final ObjectMapper objectMapper;
+    private final MonthlyPaymentHistoryService monthlyPaymentHistoryService;
+    private final AuditLogService auditLogService;
 
 
 
@@ -90,6 +96,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         Payment savedPayment = paymentRepository.save(payment);
         log.info("Payment created with reference: {}", savedPayment.getTransactionCode());
+
+        // Audit log
+        auditLogService.log(AuditAction.PAYMENT_INITIATE, EntityType.PAYMENT, savedPayment.getId(),
+                String.format("Payment of KSh %s initiated via %s", request.getAmount(), request.getPaymentMethod()));
 
         return PaymentResponse.fromEntity(savedPayment);
     }
@@ -155,9 +165,12 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("Processing M-Pesa callback: {}", callbackData.substring(0, Math.min(callbackData.length(), 200)));
 
         try {
-            Map<String, Object> callback = objectMapper.readValue(callbackData, Map.class);
-            Map<String, Object> body = (Map<String, Object>) callback.get("Body");
-            Map<String, Object> stkCallback = (Map<String, Object>) body.get("stkCallback");
+            // Type-safe deserialization using TypeReference
+            TypeReference<Map<String, Object>> typeRef = new TypeReference<Map<String, Object>>() {};
+            Map<String, Object> callback = objectMapper.readValue(callbackData, typeRef);
+
+            Map<String, Object> body = objectMapper.convertValue(callback.get("Body"), typeRef);
+            Map<String, Object> stkCallback = objectMapper.convertValue(body.get("stkCallback"), typeRef);
 
             String checkoutRequestId = (String) stkCallback.get("CheckoutRequestID");
             String resultCode = stkCallback.get("ResultCode").toString();
@@ -423,12 +436,19 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (caller.getRole() != Role.ADMIN &&
                 caller.getRole() != Role.LANDLORD) {
+          auditLogService.log(AuditAction.ACCESS_DENIED, EntityType.PAYMENT, id,
+                    String.format("Unauthorized attempt to mark payment as paid by %s (role: %s)",
+                            callerEmail, caller.getRole()),
+                    "FAILURE");
             throw new BadRequestException("Only admins and landlords can manually mark payments as paid");
         }
 
         // Only allow marking pending payments as paid
         if (payment.getStatus() != PaymentStatus.PENDING &&
                 payment.getStatus() != PaymentStatus.PROCESSING) {
+            auditLogService.log(AuditAction.PAYMENT_FAILED, EntityType.PAYMENT, id,
+                    String.format("Attempted to mark payment with status %s as paid", payment.getStatus()),
+                    "FAILURE");
             throw new BadRequestException("Only pending or processing payments can be marked as paid");
         }
 
@@ -442,6 +462,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment.setUpdatedAt(LocalDateTime.now());
         Payment updatedPayment = paymentRepository.save(payment);
+
+        auditLogService.log(AuditAction.PAYMENT_SUCCESS, EntityType.PAYMENT, id,
+                String.format("Payment manually marked as paid by %s. Transaction: %s, Amount: %s",
+                        callerEmail, transactionCode, payment.getAmount()));
 
         log.info("Payment {} manually marked as paid by {}", id, callerEmail);
 
@@ -595,9 +619,15 @@ public class PaymentServiceImpl implements PaymentService {
 
     private void handleSuccessfulCallback(Payment payment, Map<String, Object> stkCallback) {
         try {
-            Map<String, Object> callbackMetadata = (Map<String, Object>) stkCallback.get("CallbackMetadata");
+            TypeReference<Map<String, Object>> typeRef = new TypeReference<Map<String, Object>>() {};
+            TypeReference<List<Map<String, Object>>> listTypeRef = new TypeReference<List<Map<String, Object>>>() {};
+
+            Map<String, Object> callbackMetadata = objectMapper.convertValue(
+                    stkCallback.get("CallbackMetadata"), typeRef);
+
             if (callbackMetadata != null) {
-                List<Map<String, Object>> items = (List<Map<String, Object>>) callbackMetadata.get("Item");
+                List<Map<String, Object>> items = objectMapper.convertValue(
+                        callbackMetadata.get("Item"), listTypeRef);
 
                 String mpesaReceipt = null;
                 String phoneNumber = null;
@@ -652,11 +682,30 @@ public class PaymentServiceImpl implements PaymentService {
                         }
                     }
                 }
+
+                // Update monthly payment history
+                if (payment.getLease() != null && payment.getProperty() != null) {
+                    monthlyPaymentHistoryService.updateMonthlyHistory(payment);
+                }
+
+                // Audit log
+                auditLogService.log(AuditAction.PAYMENT_SUCCESS, EntityType.PAYMENT, payment.getId(),
+                        String.format("Payment of KSh %s completed successfully via M-Pesa. Receipt: %s",
+                                amount, mpesaReceipt));
             }
         } catch (Exception e) {
             log.error("Error extracting callback metadata: {}", e.getMessage());
             payment.setStatus(PaymentStatus.SUCCESSFUL);
             payment.setPaidAt(LocalDateTime.now());
+
+            // Still update monthly history even if metadata extraction fails
+            if (payment.getLease() != null && payment.getProperty() != null) {
+                try {
+                    monthlyPaymentHistoryService.updateMonthlyHistory(payment);
+                } catch (Exception ex) {
+                    log.error("Failed to update monthly payment history: {}", ex.getMessage());
+                }
+            }
         }
     }
 
@@ -805,11 +854,12 @@ public class PaymentServiceImpl implements PaymentService {
         
         // Option 3: Full payment (deposit + first month rent)
         if (lease.getDepositPaid() == null || !lease.getDepositPaid()) {
-            BigDecimal fullAmount = lease.getDeposit().add(lease.getMonthlyRent());
+            BigDecimal fullAmount = lease.getMonthlyRent();
+            BigDecimal remaining = lease.getMonthlyRent().subtract(lease.getDeposit());
             options.add(PaymentOptionResponse.builder()
                     .paymentType(FULL_PAYMENT)
                     .amount(fullAmount)
-                    .description("Full Payment (Deposit + First Month Rent)")
+                    .description("Full Payment (Deposit: " + lease.getDeposit() + " | Remaining: " + remaining + ")")
                     .available(true)
                     .build());
         }
@@ -901,7 +951,7 @@ public class PaymentServiceImpl implements PaymentService {
                 if (lease.getDepositPaid() != null && lease.getDepositPaid()) {
                     throw new BadRequestException("Deposit has already been paid");
                 }
-                amount = lease.getDeposit().add(lease.getMonthlyRent());
+                amount = lease.getMonthlyRent();
                 break;
                 
             default:
@@ -921,6 +971,7 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = Payment.builder()
                 .tenant(tenant)
                 .lease(lease)
+                .property(lease.getProperty())
                 .phoneNumber(formattedPhone)
                 .amount(amount)
                 .method(PaymentMethod.valueOf(request.getPaymentMethod().toUpperCase()))
@@ -934,7 +985,12 @@ public class PaymentServiceImpl implements PaymentService {
         
         Payment savedPayment = paymentRepository.save(payment);
         log.info("Payment created with transaction code: {}", savedPayment.getTransactionCode());
-        
+
+        // Audit log
+        auditLogService.log(AuditAction.PAYMENT_INITIATE, EntityType.PAYMENT, savedPayment.getId(),
+                String.format("Payment of KSh %s initiated for lease %d via %s",
+                        amount, lease.getId(), request.getPaymentMethod()));
+
         // Initiate M-Pesa STK push if payment method is MPESA
         if ("MPESA".equalsIgnoreCase(request.getPaymentMethod())) {
             try {

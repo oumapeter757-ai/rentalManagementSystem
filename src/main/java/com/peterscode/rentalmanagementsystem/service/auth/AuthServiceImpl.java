@@ -1,25 +1,20 @@
 package com.peterscode.rentalmanagementsystem.service.auth;
 
-import com.peterscode.rentalmanagementsystem.config.AppConfig;
 import com.peterscode.rentalmanagementsystem.dto.request.EmailRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.LoginRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.RegisterRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.ResetPasswordRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.JwtResponse;
 import com.peterscode.rentalmanagementsystem.exception.*;
-
 import com.peterscode.rentalmanagementsystem.model.logs.PasswordResetToken;
 import com.peterscode.rentalmanagementsystem.model.logs.VerificationToken;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
 import com.peterscode.rentalmanagementsystem.model.user.User;
-
 import com.peterscode.rentalmanagementsystem.repository.PasswordResetTokenRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
-
 import com.peterscode.rentalmanagementsystem.repository.VerificationTokenRepository;
 import com.peterscode.rentalmanagementsystem.security.JwtService;
 import com.peterscode.rentalmanagementsystem.security.SecurityUser;
-
 import com.peterscode.rentalmanagementsystem.service.email.EmailService;
 import com.peterscode.rentalmanagementsystem.util.NetworkUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,6 +29,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -41,9 +37,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.Random;
 
-import static com.peterscode.rentalmanagementsystem.dto.response.JwtResponse.*;
+
 
 @Slf4j
 @Service
@@ -53,27 +48,68 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final VerificationTokenRepository verificationTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
 
-    private final PasswordResetTokenRepository passwordResetTokenRepository;
-
-    private final AppConfig appConfig;
-
     @Value("${app.frontend-url:http://localhost:5174}")
     private String frontendUrl;
 
-    // Add this constant for code expiration (5 minutes)
     private static final int RESET_CODE_EXPIRY_MINUTES = 5;
+    private static final int VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
 
-    // Add this method for generating 6-digit code
+    // ─── SecureRandom is cryptographically stronger than Random ───────────────
+    private static final SecureRandom secureRandom = new SecureRandom();
+
     private String generateResetCode() {
-        Random random = new Random();
-        int code = 100000 + random.nextInt(900000); // 6-digit code (100000-999999)
+        int code = 100000 + secureRandom.nextInt(900000);
         return String.valueOf(code);
     }
+
+    // ─── Shared helper: create + save + send verification token ──────────────
+    private void createAndSendVerificationToken(User user) {
+        String token = UUID.randomUUID().toString();
+        VerificationToken verificationToken = VerificationToken.builder()
+                .token(token)
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusHours(VERIFICATION_TOKEN_EXPIRY_HOURS))
+                .build();
+        verificationTokenRepository.save(verificationToken);
+        sendVerificationEmail(user, token);
+    }
+
+    // ─── Shared helper: build JwtResponse ────────────────────────────────────
+    private JwtResponse buildJwtResponse(User user, String token) {
+        return JwtResponse.builder()
+                .token(token)
+                .tokenType("Bearer")
+                .role(user.getRole().name())
+                .userId(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .username(user.getUsername())
+                .build();
+    }
+
+    // ─── Shared helper: build JwtResponse without token (pre-verification) ───
+    private JwtResponse buildPendingVerificationResponse(User user) {
+        return JwtResponse.builder()
+                .tokenType("Bearer")
+                .role(user.getRole().name())
+                .userId(user.getId())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .username(user.getUsername())
+                .build();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC METHODS
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Override
     public boolean register(RegisterRequest request) {
@@ -84,7 +120,6 @@ public class AuthServiceImpl implements AuthService {
         }
 
         try {
-            // Create new user
             User user = User.builder()
                     .firstName(request.getFirstName())
                     .lastName(request.getLastName())
@@ -98,23 +133,11 @@ public class AuthServiceImpl implements AuthService {
                     .build();
 
             User savedUser = userRepository.save(user);
-
-            // Generate verification token
-            String token = UUID.randomUUID().toString();
-
-            VerificationToken verificationToken = VerificationToken.builder()
-                    .token(token)
-                    .user(savedUser)
-                    .expiryDate(LocalDateTime.now().plusHours(24))
-                    .build();
-
-            verificationTokenRepository.save(verificationToken);
-
-            // Send verification email
-            sendVerificationEmail(savedUser, token);
+            createAndSendVerificationToken(savedUser);
 
             log.info("User registered successfully: {}", savedUser.getEmail());
             return true;
+
         } catch (Exception e) {
             log.error("Error during user registration: {}", e.getMessage());
             throw new RuntimeException("Registration failed: " + e.getMessage(), e);
@@ -122,8 +145,127 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    public JwtResponse registerFirstAdmin(RegisterRequest request) {
+        log.info("Registering first admin: {}", request.getEmail());
+
+        if (userRepository.countByRole(Role.ADMIN) > 0) {
+            throw new AdminAlreadyExistsException("An admin already exists.");
+        }
+
+        validateEmailNotExists(request.getEmail());
+
+        User admin = User.builder()
+                .email(request.getEmail().toLowerCase().trim())
+                .username(request.getUsername().toLowerCase().trim())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
+                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
+                .role(Role.ADMIN)
+                .enabled(false)
+                .build();
+
+        User savedAdmin = userRepository.save(admin);
+        createAndSendVerificationToken(savedAdmin);
+
+        log.info("Admin registered. Verification email sent to: {}", savedAdmin.getEmail());
+
+        // No JWT yet — admin must verify email first
+        return buildPendingVerificationResponse(savedAdmin);
+    }
+
+    @Override
+    public JwtResponse createUserByAdmin(RegisterRequest request, Role role) {
+        log.info("Admin creating {}: {}", role, request.getEmail());
+
+        if (role == Role.TENANT) {
+            throw new InvalidRequestException("Admins cannot create tenants directly.");
+        }
+
+        validateEmailNotExists(request.getEmail());
+
+        User user = User.builder()
+                .email(request.getEmail().toLowerCase().trim())
+                .username(request.getUsername().toLowerCase().trim())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
+                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
+                .role(role)
+                .enabled(false) // must verify email before login
+                .build();
+
+        User savedUser = userRepository.save(user);
+        createAndSendVerificationToken(savedUser);
+        sendRegistrationEmail(savedUser, role.name());
+
+        log.info("{} created. Verification email sent to: {}", role, savedUser.getEmail());
+
+        // No JWT yet — user must verify email first
+        return buildPendingVerificationResponse(savedUser);
+    }
+
+    @Override
+    public JwtResponse registerTenant(RegisterRequest request) {
+        log.info("Registering tenant: {}", request.getEmail());
+
+        validateEmailNotExists(request.getEmail());
+
+        User tenant = User.builder()
+                .email(request.getEmail().toLowerCase().trim())
+                .username(request.getUsername().toLowerCase().trim())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
+                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
+                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
+                .role(Role.TENANT)
+                .enabled(false) // must verify email before login
+                .build();
+
+        User savedTenant = userRepository.save(tenant);
+        createAndSendVerificationToken(savedTenant);
+
+        log.info("Tenant registered. Verification email sent to: {}", savedTenant.getEmail());
+
+        // No JWT yet — tenant must verify email first
+        return buildPendingVerificationResponse(savedTenant);
+    }
+
+    @Override
     public JwtResponse login(LoginRequest request) {
         return login(request, null);
+    }
+
+    @Override
+    public JwtResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+        log.info("Login attempt: {}", request.getEmail());
+
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail().toLowerCase().trim(),
+                            request.getPassword()));
+
+            SecurityUser securityUser = (SecurityUser) authentication.getPrincipal();
+            if (securityUser == null || securityUser.user() == null) {
+                throw new AuthenticationFailedException("Authentication failed - invalid user");
+            }
+
+            User user = securityUser.user();
+
+            if (!user.isEnabled()) {
+                throw new AccountDisabledException("Account is not verified. Please verify your email first.");
+            }
+
+            String ipAddress = httpRequest != null ? NetworkUtil.getClientIp(httpRequest) : "Unknown";
+            sendLoginEmail(user, ipAddress);
+
+            String token = jwtService.generateToken(user);
+            return buildJwtResponse(user, token);
+
+        } catch (BadCredentialsException ex) {
+            throw new AuthenticationFailedException("Invalid email or password");
+        }
     }
 
     @Override
@@ -141,19 +283,11 @@ public class AuthServiceImpl implements AuthService {
         user.setEnabled(true);
         userRepository.save(user);
 
-        // Delete used token
         verificationTokenRepository.delete(verificationToken);
-
-        // Send welcome email
         sendWelcomeEmail(user);
 
         log.info("Email verified successfully for user: {}", user.getEmail());
         return true;
-    }
-
-    @Override
-    public boolean adminExists() {
-        return userRepository.countByRole(Role.ADMIN) > 0;
     }
 
     @Override
@@ -167,201 +301,29 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Account is already verified and enabled");
         }
 
-        // Delete old tokens
         verificationTokenRepository.deleteByUser(user);
-
-        // Create new verification token
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = VerificationToken.builder()
-                .token(token)
-                .user(user)
-                .expiryDate(LocalDateTime.now().plusHours(24))
-                .build();
-        verificationTokenRepository.save(verificationToken);
-
-        // Resend verification email
-        sendVerificationEmail(user, token);
+        createAndSendVerificationToken(user);
 
         log.info("Verification email resent to: {}", email);
     }
 
     @Override
-    public JwtResponse registerFirstAdmin(RegisterRequest request) {
-        log.info("Registering first admin: {}", request.getEmail());
-
-        long adminCount = userRepository.countByRole(Role.ADMIN);
-        if (adminCount > 0) {
-            throw new AdminAlreadyExistsException("An admin already exists.");
-        }
-
-        validateEmailNotExists(request.getEmail());
-
-        User admin = User.builder()
-                .email(request.getEmail().toLowerCase().trim())
-                .username(request.getUsername().toLowerCase().trim())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
-                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
-                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
-                .role(Role.ADMIN)
-                .enabled(true) // Admin doesn't need email verification
-                .build();
-
-        User savedAdmin = userRepository.save(admin);
-
-        // Send registration success email
-        sendRegistrationEmail(savedAdmin, "Admin");
-
-        String token = jwtService.generateToken(savedAdmin);
-        return builder()
-                .token(token)
-                .tokenType("Bearer")
-                .role(savedAdmin.getRole().name())
-                .userId(savedAdmin.getId())
-                .email(savedAdmin.getEmail())
-                .firstName(savedAdmin.getFirstName())
-                .lastName(savedAdmin.getLastName())
-                .username(savedAdmin.getUsername())
-                .build();
+    public boolean adminExists() {
+        return userRepository.countByRole(Role.ADMIN) > 0;
     }
 
-    @Override
-    public JwtResponse createUserByAdmin(RegisterRequest request, Role role) {
-        log.info("Admin creating {}: {}", role, request.getEmail());
-
-        validateEmailNotExists(request.getEmail());
-
-        if (role == Role.TENANT) {
-            throw new InvalidRequestException("Admins cannot create tenants directly.");
-        }
-
-        User user = User.builder()
-                .email(request.getEmail().toLowerCase().trim())
-                .username(request.getUsername().toLowerCase().trim())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
-                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
-                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
-                .role(role)
-                .enabled(true) // Admin-created users are automatically enabled
-                .build();
-
-        User savedUser = userRepository.save(user);
-
-        // Send registration success email
-        sendRegistrationEmail(savedUser, role.name());
-
-        String token = jwtService.generateToken(savedUser);
-        return builder()
-                .token(token)
-                .tokenType("Bearer")
-                .role(savedUser.getRole().name())
-                .userId(savedUser.getId())
-                .email(savedUser.getEmail())
-                .firstName(savedUser.getFirstName())
-                .lastName(savedUser.getLastName())
-                .username(savedUser.getUsername())
-                .build();
-    }
-
-    @Override
-    public JwtResponse registerTenant(RegisterRequest request) {
-        log.info("Registering tenant: {}", request.getEmail());
-
-        User tenant = User.builder()
-                .email(request.getEmail().toLowerCase().trim())
-                .username(request.getUsername().toLowerCase().trim())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .firstName(Optional.ofNullable(request.getFirstName()).orElse("").trim())
-                .lastName(Optional.ofNullable(request.getLastName()).orElse("").trim())
-                .phoneNumber(Optional.ofNullable(request.getPhoneNumber()).orElse("").trim())
-                .role(Role.TENANT)
-                .enabled(false) // Require email verification
-                .build();
-
-        User savedTenant = userRepository.save(tenant);
-
-        // Create verification token
-        String token = UUID.randomUUID().toString();
-        VerificationToken verificationToken = VerificationToken.builder()
-                .token(token)
-                .user(savedTenant)
-                .expiryDate(LocalDateTime.now().plusHours(24))
-                .build();
-        verificationTokenRepository.save(verificationToken);
-
-        // Send verification email
-        sendVerificationEmail(savedTenant, token);
-
-        String jwtToken = jwtService.generateToken(savedTenant);
-        return builder()
-                .token(jwtToken)
-                .tokenType("Bearer")
-                .role(savedTenant.getRole().name())
-                .userId(savedTenant.getId())
-                .email(savedTenant.getEmail())
-                .firstName(savedTenant.getFirstName())
-                .lastName(savedTenant.getLastName())
-                .username(savedTenant.getUsername())
-                .build();
-    }
-
-    @Override
-    public JwtResponse login(LoginRequest request, HttpServletRequest httpRequest) {
-        log.info("Login attempt: {}", request.getEmail());
-
-        try {
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getEmail().toLowerCase().trim(),
-                            request.getPassword()));
-
-            SecurityUser securityUser = (SecurityUser) authentication.getPrincipal();
-            User user = securityUser.user();
-
-            if (!user.isEnabled()) {
-                throw new AccountDisabledException("Account is not verified. Please verify your email first.");
-            }
-
-            // Get IP address if available
-            String ipAddress = httpRequest != null ? NetworkUtil.getClientIp(httpRequest) : "Unknown";
-
-            // Send login success email
-            sendLoginEmail(user, ipAddress);
-
-            String token = jwtService.generateToken(user);
-            return builder()
-                    .token(token)
-                    .tokenType("Bearer")
-                    .role(user.getRole().name())
-                    .userId(user.getId())
-                    .email(user.getEmail())
-                    .firstName(user.getFirstName())
-                    .lastName(user.getLastName())
-                    .username(user.getUsername())
-                    .build();
-
-        } catch (BadCredentialsException ex) {
-            throw new AuthenticationFailedException("Invalid email or password");
-        }
-    }
-
-    // Update the initiatePasswordReset method for 6-digit code
     @Override
     public void initiatePasswordReset(String email) {
         User user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new UserNotFoundException("User not found with email: " + email));
 
-        // Generate 6-digit code
         String resetCode = generateResetCode();
         LocalDateTime expiryDate = LocalDateTime.now().plusMinutes(RESET_CODE_EXPIRY_MINUTES);
 
-        // Invalidate any existing reset codes for this user
         passwordResetTokenRepository.deleteByUser(user);
 
-        // Create password reset token with code
         PasswordResetToken resetToken = PasswordResetToken.builder()
-                .token(resetCode) // Store the 6-digit code as token
+                .token(resetCode)
                 .user(user)
                 .expiryDate(expiryDate)
                 .used(false)
@@ -369,28 +331,21 @@ public class AuthServiceImpl implements AuthService {
 
         passwordResetTokenRepository.save(resetToken);
 
-        // Log the code (for testing/debugging)
-        log.info("🔐 Password reset code for {}: {} (Expires in {} minutes)",
-                email, resetCode, RESET_CODE_EXPIRY_MINUTES);
+        // ⚠️ Do NOT log the actual reset code — remove this line before going to prod
+        // log.info("🔐 Password reset code for {}: {}", email, resetCode);
 
-        // Send email with the 6-digit code
         sendPasswordResetCodeEmail(user, resetCode);
-
         log.info("Password reset code sent to: {}", email);
     }
 
-    // Update the resetPassword method to accept code
     @Override
     public void resetPassword(ResetPasswordRequest request) {
-        log.info("Password reset attempt with token: {}",
-                request.getToken().substring(0, Math.min(request.getToken().length(), 10)) + "...");
+        log.info("Password reset attempt");
 
-        // Validate passwords match
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
             throw new BadRequestException("Passwords do not match");
         }
 
-        // Find token by code
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired reset code"));
 
@@ -403,25 +358,20 @@ public class AuthServiceImpl implements AuthService {
         }
 
         User user = resetToken.getUser();
-
-        // Update password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
-        // Mark token as used
         resetToken.setUsed(true);
         resetToken.setUsedAt(LocalDateTime.now());
         passwordResetTokenRepository.save(resetToken);
 
-        // Send password changed notification
         sendPasswordChangedEmail(user);
-
         log.info("Password reset successful for user: {}", user.getEmail());
     }
 
-    // Add this method for validating reset code (without resetting password)
+    @Override
     public boolean validateResetCode(String code) {
-        log.info("Validating reset code: {}", code);
+        log.info("Validating reset code");
 
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(code)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid reset code"));
@@ -442,18 +392,13 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmailIgnoreCase(email.trim())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
 
-        return builder()
-                .tokenType("Bearer")
-                .role(user.getRole().name())
-                .userId(user.getId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .username(user.getUsername())
-                .build();
+        return buildPendingVerificationResponse(user);
     }
 
-    // Helper methods
+    // ─────────────────────────────────────────────────────────────────────────
+    // PRIVATE HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
     private void validateEmailNotExists(String email) {
         if (userRepository.existsByEmailIgnoreCase(email.toLowerCase().trim())) {
             throw new UserAlreadyExistsException("Email already exists: " + email);
@@ -462,31 +407,23 @@ public class AuthServiceImpl implements AuthService {
 
     private void sendVerificationEmail(User user, String token) {
         try {
-            // Use frontend URL for verification link
             String verificationLink = frontendUrl + "/verify-email?token=" + token;
-            String subject = "Verify Your Email - Rental Management System";
 
-            // Create variables map for template
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
             variables.put("verificationLink", verificationLink);
-            variables.put("expiryHours", 24);
+            variables.put("expiryHours", VERIFICATION_TOKEN_EXPIRY_HOURS);
 
-            // Create EmailRequest with variables
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
-                    .builder()
+            EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
-                    .subject(subject)
+                    .subject("Verify Your Email - Rental Management System")
                     .templateName("email-verification")
                     .variables(variables)
                     .html(true)
                     .build();
 
             emailService.sendEmailAsync(emailRequest);
-            log.info("📧 Verification email sent to: {}", user.getEmail());
-
-            // Also log the verification link for manual testing (development)
-            log.info("🔗 Verification link for manual testing: {}", verificationLink);
+            log.info("Verification email sent to: {}", user.getEmail());
 
         } catch (Exception e) {
             log.error("Failed to send verification email to {}: {}", user.getEmail(), e.getMessage());
@@ -495,10 +432,8 @@ public class AuthServiceImpl implements AuthService {
 
     private void sendRegistrationEmail(User user, String userType) {
         try {
-            String subject = "Welcome to Rental Management System - Registration Successful";
             String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            // Create variables map
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
             variables.put("lastName", user.getLastName());
@@ -506,35 +441,9 @@ public class AuthServiceImpl implements AuthService {
             variables.put("email", user.getEmail());
             variables.put("registeredTime", currentTime);
 
-            String body = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="UTF-8">
-                        <style>
-                            body { font-family: Arial, sans-serif; line-height: 1.6; }
-                            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <h2>Registration Successful</h2>
-                            <p>Hello %s %s,</p>
-                            <p>Your account has been successfully registered as a <strong>%s</strong>.</p>
-                            <p><strong>Email:</strong> %s</p>
-                            <p><strong>Registered On:</strong> %s</p>
-                            <p>You can now log in to the system.</p>
-                        </div>
-                    </body>
-                    </html>
-                    """.formatted(user.getFirstName(), user.getLastName(), userType,
-                    user.getEmail(), currentTime);
-
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
-                    .builder()
+            EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
-                    .subject(subject)
-                    .body(body)
+                    .subject("Welcome to Rental Management System - Registration Successful")
                     .templateName("registration-success")
                     .variables(variables)
                     .html(true)
@@ -550,17 +459,13 @@ public class AuthServiceImpl implements AuthService {
 
     private void sendWelcomeEmail(User user) {
         try {
-            String subject = "Welcome to Rental Management System!";
-
-            // Create variables map
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
             variables.put("frontendUrl", frontendUrl);
 
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
-                    .builder()
+            EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
-                    .subject(subject)
+                    .subject("Welcome to Rental Management System!")
                     .templateName("welcome")
                     .variables(variables)
                     .html(true)
@@ -576,19 +481,17 @@ public class AuthServiceImpl implements AuthService {
 
     private void sendLoginEmail(User user, String ipAddress) {
         try {
-            String subject = "Security Alert: Successful Login to Rental Management System";
             String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            // Create variables map
             Map<String, Object> variables = new HashMap<>();
+            variables.put("firstName", user.getFirstName());
             variables.put("email", user.getEmail());
             variables.put("loginTime", currentTime);
             variables.put("ipAddress", ipAddress);
 
-            com.peterscode.rentalmanagementsystem.dto.request.EmailRequest emailRequest = com.peterscode.rentalmanagementsystem.dto.request.EmailRequest
-                    .builder()
+            EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
-                    .subject(subject)
+                    .subject("Security Alert: Successful Login to Rental Management System")
                     .templateName("login-success")
                     .variables(variables)
                     .html(true)
@@ -602,11 +505,8 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    // Add this method for sending password reset code email
     private void sendPasswordResetCodeEmail(User user, String resetCode) {
         try {
-            String subject = "Your Password Reset Code - Rental Management System";
-
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
             variables.put("resetCode", resetCode);
@@ -615,7 +515,7 @@ public class AuthServiceImpl implements AuthService {
 
             EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
-                    .subject(subject)
+                    .subject("Your Password Reset Code - Rental Management System")
                     .templateName("password-reset-code")
                     .variables(variables)
                     .html(true)
@@ -625,15 +525,12 @@ public class AuthServiceImpl implements AuthService {
             log.info("Password reset code email sent to: {}", user.getEmail());
 
         } catch (Exception e) {
-            log.error("Failed to send password reset code email to {}: {}",
-                    user.getEmail(), e.getMessage());
+            log.error("Failed to send password reset code email to {}: {}", user.getEmail(), e.getMessage());
         }
     }
 
     private void sendPasswordChangedEmail(User user) {
         try {
-            String subject = "Password Changed Successfully - Rental Management System";
-
             Map<String, Object> variables = new HashMap<>();
             variables.put("firstName", user.getFirstName());
             variables.put("changedTime",
@@ -641,7 +538,7 @@ public class AuthServiceImpl implements AuthService {
 
             EmailRequest emailRequest = EmailRequest.builder()
                     .recipient(user.getEmail())
-                    .subject(subject)
+                    .subject("Password Changed Successfully - Rental Management System")
                     .templateName("password-changed")
                     .variables(variables)
                     .html(true)

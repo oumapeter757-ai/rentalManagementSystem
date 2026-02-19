@@ -47,6 +47,10 @@ public enum AuditAction {
     USER_ENABLE,
     ROLE_CHANGE,
     
+    // Messaging Operations
+    SEND_MESSAGE,
+    READ_MESSAGE,
+
     // System Operations
     SYSTEM_ERROR,
     ACCESS_DENIED

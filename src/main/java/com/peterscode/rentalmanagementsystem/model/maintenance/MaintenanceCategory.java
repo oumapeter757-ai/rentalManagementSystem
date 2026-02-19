@@ -1,10 +1,5 @@
 package com.peterscode.rentalmanagementsystem.model.maintenance;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-
-@Getter
-@AllArgsConstructor
 public enum MaintenanceCategory {
     PLUMBING("Plumbing", "Pipes, drains, toilets, sinks"),
     ELECTRICAL("Electrical", "Wiring, outlets, lighting, circuit breakers"),
@@ -20,6 +15,16 @@ public enum MaintenanceCategory {
     private final String displayName;
     private final String description;
 
+    MaintenanceCategory(String displayName, String description) {
+        this.displayName = displayName;
+        this.description = description;
+    }
 
+    public String getDisplayName() {
+        return displayName;
+    }
 
+    public String getDescription() {
+        return description;
+    }
 }

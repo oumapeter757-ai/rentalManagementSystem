@@ -19,7 +19,7 @@ public class TwilioConfig {
 
     @PostConstruct
     public void initTwilio() {
-        if (Twilio.getRestClient() == null && accountSid != null && authToken != null) {
+        if (accountSid != null && authToken != null) {
             Twilio.init(accountSid, authToken);
         }
     }

@@ -1,8 +1,27 @@
+# Maven
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Uploads directory (runtime generated files)
+uploads/
+
+# Logs
+*.log
+logs/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
 
 ### STS ###
 .apt_generated
@@ -12,12 +31,6 @@ target/
 .settings
 .springBeans
 .sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
 
 ### NetBeans ###
 /nbproject/private/
@@ -31,6 +44,3 @@ build/
 
 ### VS Code ###
 .vscode/
-.env
-.env
-.env
