@@ -35,6 +35,7 @@ public class PropertyRequest {
     private List<String> amenities;
 
     private List<String> imageUrls;
+    @Builder.Default
     private Boolean available = true;
 
     private List<String> galleryImages;

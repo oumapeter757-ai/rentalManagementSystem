@@ -53,6 +53,7 @@ public class AuditLog {
     private String userAgent;
 
     @Column(length = 20)
+    @Builder.Default
     private String status = "SUCCESS";
 
     @Column(name = "error_message", columnDefinition = "TEXT")

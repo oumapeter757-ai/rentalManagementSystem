@@ -9,8 +9,6 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      connection-init-sql: "SET @app_authorized = 'RENTAL_APP_V1'"
 
   jpa:
     hibernate:

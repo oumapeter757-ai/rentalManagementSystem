@@ -70,6 +70,7 @@ public class Payment {
     private String gatewayResponse;
 
     @Column(name = "callback_received")
+    @Builder.Default
     private boolean callbackReceived = false;
 
     @Column(name = "paid_at")

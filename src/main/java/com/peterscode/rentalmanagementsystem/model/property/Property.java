@@ -55,6 +55,7 @@ public class Property {
     private Boolean furnished;
 
     @Column(nullable = false)
+    @Builder.Default
     private Boolean available = true;
 
     @Column(name = "deposit_amount", precision = 19, scale = 2)
@@ -68,12 +69,14 @@ public class Property {
     @ElementCollection
     @CollectionTable(name = "property_amenities", joinColumns = @JoinColumn(name = "property_id"))
     @Column(name = "amenity")
+    @Builder.Default
     private List<String> amenities = new ArrayList<>();
 
     @Column()
     private String mainImageUrl;
 
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
     private List<PropertyImage> images = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)

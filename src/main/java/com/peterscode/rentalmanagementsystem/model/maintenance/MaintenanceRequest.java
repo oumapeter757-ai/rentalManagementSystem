@@ -49,6 +49,7 @@ public class MaintenanceRequest {
     private LocalDateTime requestDate;
 
     @OneToMany(mappedBy = "maintenanceRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<MaintenanceImage> images = new ArrayList<>();
 
     @PrePersist

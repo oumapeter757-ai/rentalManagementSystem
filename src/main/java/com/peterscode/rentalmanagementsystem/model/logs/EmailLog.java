@@ -38,6 +38,7 @@ public class EmailLog {
     private EmailStatus status;
 
     @Column(name = "retry_count", nullable = false)
+    @Builder.Default
     private int retryCount = 0;
 
     @Column(name = "sent_at")

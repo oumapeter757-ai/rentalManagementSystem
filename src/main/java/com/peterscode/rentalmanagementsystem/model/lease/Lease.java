@@ -46,6 +46,7 @@ public class Lease {
     private BigDecimal deposit;
 
     @Column(name = "deposit_paid")
+    @Builder.Default
     private Boolean depositPaid = false;
 
     @Enumerated(EnumType.STRING)

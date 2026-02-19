@@ -8,12 +8,11 @@ import jakarta.annotation.PostConstruct;
 /**
  * Database security configuration.
  *
- * The actual connection-init-sql is set in application.yml:
- *   spring.datasource.hikari.connection-init-sql: "SET @app_authorized = 'RENTAL_APP_V1'"
- *
- * This works with MySQL triggers (V26__add_db_security_triggers.sql) that reject
- * any INSERT/UPDATE/DELETE when @app_authorized is NOT set — blocking direct DB access
- * via MySQL CLI, Workbench, phpMyAdmin, etc.
+ * Security is enforced via:
+ * 1. MySQL AFTER triggers that audit all INSERT/UPDATE/DELETE operations (V27)
+ * 2. Audit logs table is immutable (BEFORE UPDATE/DELETE triggers block modifications)
+ * 3. A read-only MySQL user 'rental_readonly' for external database inspection
+ * 4. Application-level audit logging via AOP (AuditAspect)
  */
 @Configuration
 @Slf4j
@@ -21,7 +20,8 @@ public class DataSourceSecurityConfig {
 
     @PostConstruct
     public void logSecurityStatus() {
-        log.info("✅ Database security: @app_authorized is set via HikariCP connection-init-sql");
-        log.info("   Direct DB access (CLI, Workbench, phpMyAdmin) will be BLOCKED by triggers");
+        log.info("✅ DB Security: Audit triggers active on all critical tables");
+        log.info("✅ DB Security: Audit logs are immutable (UPDATE/DELETE blocked)");
+        log.info("✅ DB Security: Read-only user 'rental_readonly' available for direct DB inspection");
     }
 }

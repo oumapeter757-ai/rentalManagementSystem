@@ -26,6 +26,7 @@ public class MaintenanceImage {
     private String uploadedBy;
 
     @Column(name = "deleted")
+    @Builder.Default
     private Boolean deleted = false;
 
     private LocalDateTime uploadedAt;

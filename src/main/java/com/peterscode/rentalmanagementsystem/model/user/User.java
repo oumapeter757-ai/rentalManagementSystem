@@ -49,13 +49,16 @@ public class User {
     private Role role;
 
     @Column(name = "enabled")
+    @Builder.Default
     private boolean enabled = true;
 
 
     @Column(name = "created_at")
+    @Builder.Default
     private Instant createdAt = Instant.now();
 
     @Column(name = "updated_at")
+    @Builder.Default
     private Instant updatedAt = Instant.now();
 
 
