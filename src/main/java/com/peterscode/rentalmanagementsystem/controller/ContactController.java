@@ -20,14 +20,12 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Slf4j
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Contact", description = "Public contact & admin contact message endpoints")
+@Tag(name = "Contact", description = "Public contact & admin/landlord contact message endpoints")
 public class ContactController {
 
     private final UserRepository userRepository;
@@ -43,15 +41,33 @@ public class ContactController {
     // ═══════════════════════════════════════
 
     @GetMapping("/api/public/contact-info")
-    @Operation(summary = "Get admin contact info for public page (no auth)")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getContactInfo() {
+    @Operation(summary = "Get admin + landlord contact info for public page (no auth)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getContactInfo() {
+        Map<String, Object> info = new LinkedHashMap<>();
+
+        // Admin info
         List<User> admins = userRepository.findByRole(Role.ADMIN);
-        Map<String, String> info = new LinkedHashMap<>();
         if (!admins.isEmpty()) {
             User admin = admins.get(0);
-            info.put("email", admin.getEmail());
-            info.put("phone", admin.getPhoneNumber() != null ? admin.getPhoneNumber() : "");
+            Map<String, String> adminInfo = new LinkedHashMap<>();
+            adminInfo.put("email", admin.getEmail());
+            adminInfo.put("phone", admin.getPhoneNumber() != null ? admin.getPhoneNumber() : "");
+            adminInfo.put("name", buildFullName(admin));
+            info.put("admin", adminInfo);
         }
+
+        // Landlord info (all landlords)
+        List<User> landlords = userRepository.findByRole(Role.LANDLORD);
+        List<Map<String, String>> landlordList = new ArrayList<>();
+        for (User landlord : landlords) {
+            Map<String, String> ll = new LinkedHashMap<>();
+            ll.put("email", landlord.getEmail());
+            ll.put("phone", landlord.getPhoneNumber() != null ? landlord.getPhoneNumber() : "");
+            ll.put("name", buildFullName(landlord));
+            landlordList.add(ll);
+        }
+        info.put("landlords", landlordList);
+
         return ResponseEntity.ok(ApiResponse.success("Contact info retrieved", info));
     }
 
@@ -70,7 +86,7 @@ public class ContactController {
     }
 
     @PostMapping("/api/public/contact")
-    @Operation(summary = "Submit a contact message (public, saved to DB + emailed to admin)")
+    @Operation(summary = "Submit a contact message (public, saved to DB + emailed to admin & landlords)")
     public ResponseEntity<ApiResponse<Object>> submitContact(@RequestBody Map<String, String> body) {
         String message = body.getOrDefault("message", "").trim();
 
@@ -91,10 +107,19 @@ public class ContactController {
             }
         }
 
-        log.info("📩 Contact message saved (id={}) and emailed to {} admin(s)", cm.getId(), admins.size());
+        // Email all landlords
+        List<User> landlords = userRepository.findByRole(Role.LANDLORD);
+        for (User landlord : landlords) {
+            if (landlord.getEmail() != null && !landlord.getEmail().isBlank()) {
+                sendContactEmail(landlord.getEmail(), message);
+            }
+        }
+
+        log.info("📩 Contact message saved (id={}) and emailed to {} admin(s) + {} landlord(s)",
+                cm.getId(), admins.size(), landlords.size());
 
         return ResponseEntity.ok(ApiResponse.success(
-                "Thank you! Your message has been sent to our admin team.", null));
+                "Thank you! Your message has been sent to our team.", null));
     }
 
     // ═══════════════════════════════════════
@@ -104,7 +129,7 @@ public class ContactController {
     @GetMapping("/api/admin/contact-messages")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get all contact messages (Admin only)")
-    public ResponseEntity<ApiResponse<List<ContactMessage>>> getAllContactMessages() {
+    public ResponseEntity<ApiResponse<List<ContactMessage>>> adminGetAll() {
         List<ContactMessage> messages = contactMessageRepository.findAllByOrderByCreatedAtDesc();
         return ResponseEntity.ok(ApiResponse.success("Contact messages retrieved", messages));
     }
@@ -112,7 +137,7 @@ public class ContactController {
     @GetMapping("/api/admin/contact-messages/unread-count")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get unread contact message count (Admin only)")
-    public ResponseEntity<ApiResponse<Long>> getUnreadCount() {
+    public ResponseEntity<ApiResponse<Long>> adminUnreadCount() {
         long count = contactMessageRepository.countByReadFalse();
         return ResponseEntity.ok(ApiResponse.success("Unread count", count));
     }
@@ -120,34 +145,69 @@ public class ContactController {
     @PutMapping("/api/admin/contact-messages/{id}/read")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Mark a contact message as read (Admin only)")
-    public ResponseEntity<ApiResponse<Object>> markAsRead(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Object>> adminMarkRead(@PathVariable Long id) {
+        return markMessageRead(id);
+    }
+
+    @DeleteMapping("/api/admin/contact-messages/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Delete a contact message (Admin only)")
+    public ResponseEntity<ApiResponse<Object>> adminDelete(@PathVariable Long id) {
+        return deleteContactMessage(id);
+    }
+
+    // ═══════════════════════════════════════
+    //  LANDLORD ENDPOINTS  /api/landlord/contact-messages
+    // ═══════════════════════════════════════
+
+    @GetMapping("/api/landlord/contact-messages")
+    @PreAuthorize("hasRole('LANDLORD')")
+    @Operation(summary = "Get all contact messages (Landlord)")
+    public ResponseEntity<ApiResponse<List<ContactMessage>>> landlordGetAll() {
+        List<ContactMessage> messages = contactMessageRepository.findAllByOrderByCreatedAtDesc();
+        return ResponseEntity.ok(ApiResponse.success("Contact messages retrieved", messages));
+    }
+    @GetMapping("/api/landlord/contact-messages/unread-count")
+    @PreAuthorize("hasRole('LANDLORD')")
+    @Operation(summary = "Get unread contact message count (Landlord)")
+    public ResponseEntity<ApiResponse<Long>> landlordUnreadCount() {
+        long count = contactMessageRepository.countByReadFalse();
+        return ResponseEntity.ok(ApiResponse.success("Unread count", count));
+    }
+    @PutMapping("/api/landlord/contact-messages/{id}/read")
+    @PreAuthorize("hasRole('LANDLORD')")
+    @Operation(summary = "Mark a contact message as read (Landlord)")
+    public ResponseEntity<ApiResponse<Object>> landlordMarkRead(@PathVariable Long id) {
+        return markMessageRead(id);
+    }
+    @DeleteMapping("/api/landlord/contact-messages/{id}")
+    @PreAuthorize("hasRole('LANDLORD')")
+    @Operation(summary = "Delete a contact message (Landlord)")
+    public ResponseEntity<ApiResponse<Object>> landlordDelete(@PathVariable Long id) {
+        return deleteContactMessage(id);
+    }
+    // ═══════════════════════════════════════
+    //  SHARED HELPERS
+    // ═══════════════════════════════════════
+    private ResponseEntity<ApiResponse<Object>> markMessageRead(Long id) {
         ContactMessage cm = contactMessageRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Contact message not found"));
         cm.setRead(true);
         contactMessageRepository.save(cm);
         return ResponseEntity.ok(ApiResponse.success("Marked as read", null));
     }
-
-    @DeleteMapping("/api/admin/contact-messages/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Delete a contact message (Admin only)")
-    public ResponseEntity<ApiResponse<Object>> deleteMessage(@PathVariable Long id) {
+    private ResponseEntity<ApiResponse<Object>> deleteContactMessage(Long id) {
         contactMessageRepository.deleteById(id);
         return ResponseEntity.ok(ApiResponse.success("Message deleted", null));
     }
-
-    // ═══════════════════════════════════════
-    //  HELPERS
-    // ═══════════════════════════════════════
-
     @Async
-    protected void sendContactEmail(String adminEmail, String message) {
+    protected void sendContactEmail(String recipientEmail, String message) {
         try {
             MimeMessage mimeMessage = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
             helper.setFrom(fromEmail);
-            helper.setTo(adminEmail);
-            helper.setSubject("📩 New Contact Message — RentalHub");
+            helper.setTo(recipientEmail);
+            helper.setSubject("\uD83D\uDCE9 New Contact Message \u2014 RentalHub");
             helper.setText(
                 "<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;'>" +
                 "  <div style='background:#6366f1;color:#fff;padding:20px;border-radius:12px 12px 0 0;text-align:center;'>" +
@@ -162,16 +222,22 @@ public class ContactController {
                 "  </div>" +
                 "</div>", true);
             javaMailSender.send(mimeMessage);
-            log.info("✅ Contact email sent to {}", adminEmail);
+            log.info("Contact email sent to {}", recipientEmail);
         } catch (Exception e) {
-            log.error("❌ Failed to send contact email to {}: {}", adminEmail, e.getMessage());
+            log.error("Failed to send contact email to {}: {}", recipientEmail, e.getMessage());
         }
     }
-
     private String escapeHtml(String text) {
         return text.replace("&", "&amp;")
                    .replace("<", "&lt;")
                    .replace(">", "&gt;")
                    .replace("\"", "&quot;");
+    }
+
+    private String buildFullName(User user) {
+        String first = user.getFirstName() != null ? user.getFirstName().trim() : "";
+        String last = user.getLastName() != null ? user.getLastName().trim() : "";
+        String full = (first + " " + last).trim();
+        return full.isEmpty() ? user.getEmail() : full;
     }
 }
