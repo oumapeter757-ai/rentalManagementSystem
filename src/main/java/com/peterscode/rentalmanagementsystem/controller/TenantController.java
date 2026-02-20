@@ -8,6 +8,7 @@ import com.peterscode.rentalmanagementsystem.service.payment.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -115,5 +116,25 @@ public class TenantController {
                 "hasOutstandingBalance", balance.compareTo(BigDecimal.ZERO) > 0
         );
         return ResponseEntity.ok(ApiResponse.success("Payment summary retrieved successfully", summary));
+    }
+
+    // ── Admin Payment History Management ──────────────────────────────
+
+    @GetMapping("/admin/payment-histories")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Get all monthly payment histories (admin/landlord)")
+    public ResponseEntity<ApiResponse<List<MonthlyPaymentHistoryResponse>>> getAllPaymentHistories() {
+        List<MonthlyPaymentHistoryResponse> histories = monthlyPaymentHistoryService.getAllMonthlyHistories();
+        return ResponseEntity.ok(ApiResponse.success("All payment histories retrieved", histories));
+    }
+
+    @PutMapping("/admin/payment-history/{historyId}/deadline")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Update payment deadline for a monthly history")
+    public ResponseEntity<ApiResponse<MonthlyPaymentHistoryResponse>> updatePaymentDeadline(
+            @PathVariable Long historyId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate deadline) {
+        MonthlyPaymentHistoryResponse updated = monthlyPaymentHistoryService.updatePaymentDeadline(historyId, deadline);
+        return ResponseEntity.ok(ApiResponse.success("Payment deadline updated successfully", updated));
     }
 }

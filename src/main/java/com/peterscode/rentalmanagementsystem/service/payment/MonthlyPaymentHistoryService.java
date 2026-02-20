@@ -163,9 +163,31 @@ public class MonthlyPaymentHistoryService {
      */
     @Transactional
     public void refreshExpiredHistories() {
-        // This can be called monthly to archive old data or reset for new billing cycles
         log.info("Refreshing monthly payment histories...");
-        // Implementation for monthly refresh logic
+    }
+
+    /**
+     * Admin: Update payment deadline for a specific monthly history
+     */
+    @Transactional
+    public MonthlyPaymentHistoryResponse updatePaymentDeadline(Long historyId, LocalDate newDeadline) {
+        MonthlyPaymentHistory history = monthlyPaymentHistoryRepository.findById(historyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Monthly payment history not found"));
+        history.setPaymentDeadline(newDeadline);
+        monthlyPaymentHistoryRepository.save(history);
+        log.info("Updated payment deadline for history {} to {}", historyId, newDeadline);
+        return toResponse(history);
+    }
+
+    /**
+     * Admin: Get all monthly payment histories
+     */
+    @Transactional(readOnly = true)
+    public List<MonthlyPaymentHistoryResponse> getAllMonthlyHistories() {
+        return monthlyPaymentHistoryRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     private MonthlyPaymentHistoryResponse toResponse(MonthlyPaymentHistory history) {

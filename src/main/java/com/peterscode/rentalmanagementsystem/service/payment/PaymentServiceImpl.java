@@ -24,6 +24,9 @@ import com.peterscode.rentalmanagementsystem.repository.LeaseRepository;
 import com.peterscode.rentalmanagementsystem.repository.PaymentRepository;
 import com.peterscode.rentalmanagementsystem.repository.PropertyRepository;
 import com.peterscode.rentalmanagementsystem.repository.UserRepository;
+import com.peterscode.rentalmanagementsystem.repository.RentalApplicationRepository;
+import com.peterscode.rentalmanagementsystem.model.application.RentalApplication;
+import com.peterscode.rentalmanagementsystem.model.application.RentalApplicationStatus;
 
 import com.peterscode.rentalmanagementsystem.service.audit.AuditLogService;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +53,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final UserRepository userRepository;
     private final LeaseRepository leaseRepository;
     private final PropertyRepository propertyRepository;
+    private final RentalApplicationRepository rentalApplicationRepository;
     private final MpesaService mpesaService;
     private final StripeService stripeService; // Inject StripeService
     private final ObjectMapper objectMapper;
@@ -176,7 +180,11 @@ public class PaymentServiceImpl implements PaymentService {
             String resultCode = stkCallback.get("ResultCode").toString();
             String resultDesc = (String) stkCallback.get("ResultDesc");
 
-            Optional<Payment> paymentOpt = paymentRepository.findByTransactionCode(checkoutRequestId);
+            // Look up by checkoutRequestID field first, then fallback to transactionCode
+            Optional<Payment> paymentOpt = paymentRepository.findByCheckoutRequestID(checkoutRequestId);
+            if (paymentOpt.isEmpty()) {
+                paymentOpt = paymentRepository.findByTransactionCode(checkoutRequestId);
+            }
 
             if (paymentOpt.isPresent()) {
                 Payment payment = paymentOpt.get();
@@ -790,11 +798,18 @@ public class PaymentServiceImpl implements PaymentService {
             log.info("Querying M-Pesa transaction status for: {}", checkoutRequestId);
             MpesaTransactionStatusResponse statusResponse = mpesaService.queryTransactionStatus(checkoutRequestId);
 
-            Optional<Payment> paymentOpt = paymentRepository.findByTransactionCode(checkoutRequestId);
+            if (statusResponse == null) {
+                log.warn("No status response from M-Pesa for: {}", checkoutRequestId);
+                return;
+            }
+
+            Optional<Payment> paymentOpt = paymentRepository.findByCheckoutRequestID(checkoutRequestId);
+            if (paymentOpt.isEmpty()) {
+                paymentOpt = paymentRepository.findByTransactionCode(checkoutRequestId);
+            }
             if (paymentOpt.isPresent() && !paymentOpt.get().isCallbackReceived()) {
                 log.info("Transaction {} status: {}", checkoutRequestId, statusResponse.getResultDesc());
 
-                // Update payment based on query result if needed
                 Payment payment = paymentOpt.get();
                 if (statusResponse.getResultCode() != null) {
                     if (statusResponse.getResultCode().equals("0")) {
@@ -842,24 +857,24 @@ public class PaymentServiceImpl implements PaymentService {
                     .build());
         }
         
-        // Option 2: Monthly rent (if deposit is paid or lease is active)
+        // Option 2: Remaining balance (if deposit is paid) = Rent - Deposit
         if (lease.getDepositPaid() != null && lease.getDepositPaid()) {
+            BigDecimal balance = lease.getMonthlyRent().subtract(lease.getDeposit()).max(BigDecimal.ZERO);
             options.add(PaymentOptionResponse.builder()
                     .paymentType(RENT)
-                    .amount(lease.getMonthlyRent())
-                    .description("Monthly Rent")
-                    .available(true)
+                    .amount(balance)
+                    .description("Remaining Balance")
+                    .available(balance.compareTo(BigDecimal.ZERO) > 0)
                     .build());
         }
         
-        // Option 3: Full payment (deposit + first month rent)
+        // Option 3: Full payment (monthly rent amount - deposit is included in this)
         if (lease.getDepositPaid() == null || !lease.getDepositPaid()) {
             BigDecimal fullAmount = lease.getMonthlyRent();
-            BigDecimal remaining = lease.getMonthlyRent().subtract(lease.getDeposit());
             options.add(PaymentOptionResponse.builder()
                     .paymentType(FULL_PAYMENT)
                     .amount(fullAmount)
-                    .description("Full Payment (Deposit: " + lease.getDeposit() + " | Remaining: " + remaining + ")")
+                    .description("Full Payment")
                     .available(true)
                     .build());
         }
@@ -901,6 +916,20 @@ public class PaymentServiceImpl implements PaymentService {
 
             if (activeLease.isPresent()) {
                 lease = activeLease.get();
+
+                // Ensure rental application exists for existing lease
+                Optional<RentalApplication> existingApp = rentalApplicationRepository
+                        .findByPropertyIdAndTenantId(property.getId(), tenant.getId());
+                if (existingApp.isEmpty()) {
+                    RentalApplication application = RentalApplication.builder()
+                            .tenant(tenant)
+                            .property(property)
+                            .status(RentalApplicationStatus.APPROVED)
+                            .reason("Auto-created for existing lease")
+                            .build();
+                    rentalApplicationRepository.save(application);
+                    log.info("Auto-created APPROVED application for existing lease - tenant {} property {}", tenant.getId(), property.getId());
+                }
             } else {
                 // Check if property is available
                 if (!property.isAvailable() && !"AVAILABLE".equalsIgnoreCase(String.valueOf(property.getStatus()))) {
@@ -920,6 +949,20 @@ public class PaymentServiceImpl implements PaymentService {
                         .build();
                 lease = leaseRepository.save(lease);
                 log.info("Created new PENDING lease {} for tenant {} and property {}", lease.getId(), tenant.getId(), property.getId());
+
+                // Auto-create rental application if one doesn't exist
+                Optional<RentalApplication> existingApp = rentalApplicationRepository
+                        .findByPropertyIdAndTenantId(property.getId(), tenant.getId());
+                if (existingApp.isEmpty()) {
+                    RentalApplication application = RentalApplication.builder()
+                            .tenant(tenant)
+                            .property(property)
+                            .status(RentalApplicationStatus.APPROVED)
+                            .reason("Auto-created during payment initiation")
+                            .build();
+                    rentalApplicationRepository.save(application);
+                    log.info("Auto-created APPROVED application for tenant {} and property {}", tenant.getId(), property.getId());
+                }
             }
         } else {
             throw new BadRequestException("Either Lease ID or Property ID must be provided");
@@ -938,12 +981,10 @@ public class PaymentServiceImpl implements PaymentService {
                 
             case "RENT":
                 if (lease.getDepositPaid() == null || !lease.getDepositPaid()) {
-                     // For flexible payments, we might allow this, but generally deposit comes first
-                     // But if it's a new lease, they should pay deposit first or FULL_AMOUNT
-                     // Let's enforce deposit first rule unless it's bundled
                     throw new BadRequestException("Deposit must be paid first before paying rent");
                 }
-                amount = lease.getMonthlyRent();
+                // Balance = Rent - Deposit
+                amount = lease.getMonthlyRent().subtract(lease.getDeposit()).max(BigDecimal.ZERO);
                 break;
                 
             case "FULL_AMOUNT":
@@ -1002,8 +1043,17 @@ public class PaymentServiceImpl implements PaymentService {
                         .accountReference("LEASE-" + lease.getId())
                         .build();
                 
-                mpesaService.initiateStkPush(stkRequest);
+                MpesaStkResponse stkResponse = mpesaService.initiateStkPush(stkRequest);
                 savedPayment.setStatus(PaymentStatus.PROCESSING);
+
+                // Save CheckoutRequestID and MerchantRequestID for callback lookup
+                if (stkResponse != null) {
+                    savedPayment.setCheckoutRequestID(stkResponse.getCheckoutRequestID());
+                    savedPayment.setMerchantRequestID(stkResponse.getMerchantRequestID());
+                    log.info("Saved CheckoutRequestID: {} for payment: {}",
+                            stkResponse.getCheckoutRequestID(), savedPayment.getId());
+                }
+
                 paymentRepository.save(savedPayment);
                 log.info("M-Pesa STK push initiated successfully for payment: {}", savedPayment.getId());
                 
@@ -1076,9 +1126,23 @@ public class PaymentServiceImpl implements PaymentService {
                 PaymentStatus.PROCESSING, PaymentMethod.MPESA);
 
         for (Payment payment : pendingPayments) {
-            if (payment.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(10))) {
-                log.info("Querying status for old transaction: {}", payment.getTransactionCode());
-                queryMpesaTransactionStatus(payment.getTransactionCode());
+            // If transaction is older than 1 hour, mark as FAILED — Safaricom likely won't respond
+            if (payment.getCreatedAt().isBefore(LocalDateTime.now().minusHours(1))) {
+                log.warn("Marking stale transaction as FAILED (>1hr old): {}", payment.getTransactionCode());
+                payment.setStatus(PaymentStatus.FAILED);
+                payment.setNotes("Auto-failed: M-Pesa transaction timed out after 1 hour with no callback");
+                payment.setCallbackReceived(true); // Stop further queries
+                paymentRepository.save(payment);
+                continue;
+            }
+            // Only query transactions between 2-60 minutes old
+            if (payment.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(2))) {
+                log.info("Querying status for pending transaction: {}", payment.getTransactionCode());
+                try {
+                    queryMpesaTransactionStatus(payment.getTransactionCode());
+                } catch (Exception e) {
+                    log.error("Error querying transaction {}: {}", payment.getTransactionCode(), e.getMessage());
+                }
             }
         }
     }

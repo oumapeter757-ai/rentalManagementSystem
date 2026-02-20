@@ -52,7 +52,11 @@ public class UserServiceImpl implements UserService {
         if (userDetails.getUsername() != null) {
             user.setUsername(userDetails.getUsername());
         }
+        if (userDetails.getPhoneNumber() != null) {
+            user.setPhoneNumber(userDetails.getPhoneNumber());
+        }
 
+        user.setUpdatedAt(java.time.Instant.now());
         return userRepository.save(user);
     }
 

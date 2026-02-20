@@ -15,5 +15,5 @@ public interface MpesaService {
     String generateTimestamp();
     String generatePassword(String timestamp);
 
-    void initiateStkPush(MpesaStkRequest stkRequest);
+    MpesaStkResponse initiateStkPush(MpesaStkRequest stkRequest);
 }

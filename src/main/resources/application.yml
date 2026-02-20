@@ -97,11 +97,11 @@ stripe:
     key: ${STRIPE_SECRET_KEY}
     public-key: ${STRIPE_PUBLISHABLE_KEY}
 
-twilio:
-  account-sid: ${TWILIO_ACCOUNT_SID}
-  auth-token: ${TWILIO_AUTH_TOKEN}
-  phone-number: ${TWILIO_PHONE_NUMBER}
-  messaging-service-sid: ${TWILIO_MESSAGING_SERVICE_SID}
+
+africastalking:
+  username: ${AT_USERNAME:sandbox}
+  api-key: ${AT_API_KEY:}
+  sender-id: ${AT_SENDER_ID:}
 
 server:
   port: 8080

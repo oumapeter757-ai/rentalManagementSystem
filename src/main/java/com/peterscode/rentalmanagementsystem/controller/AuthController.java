@@ -154,4 +154,29 @@ public class AuthController {
         JwtResponse userInfo = authService.getUserInfoByEmail(email);
         return ResponseEntity.ok(ApiResponse.success("Token is valid", userInfo));
     }
+
+    @PutMapping("/change-password")
+    @Operation(summary = "Change password for authenticated user")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            org.springframework.security.core.Authentication authentication,
+            @RequestBody java.util.Map<String, String> payload) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Not authenticated"));
+        }
+        String currentPassword = payload.get("currentPassword");
+        String newPassword = payload.get("newPassword");
+
+        if (currentPassword == null || newPassword == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Current and new password are required"));
+        }
+
+        try {
+            authService.changePassword(authentication.getName(), currentPassword, newPassword);
+            return ResponseEntity.ok(ApiResponse.success("Password changed successfully", null));
+        } catch (org.springframework.security.authentication.BadCredentialsException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Current password is incorrect"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
 }

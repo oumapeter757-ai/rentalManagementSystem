@@ -54,6 +54,8 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
 
+
+
     @Value("${app.frontend-url:http://localhost:5174}")
     private String frontendUrl;
 
@@ -88,9 +90,10 @@ public class AuthServiceImpl implements AuthService {
                 .role(user.getRole().name())
                 .userId(user.getId())
                 .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
+                .firstName(resolveName(user.getFirstName(), user.getUsername(), user.getEmail()))
+                .lastName(user.getLastName() != null ? user.getLastName() : "")
                 .username(user.getUsername())
+                .phoneNumber(user.getPhoneNumber())
                 .build();
     }
 
@@ -101,10 +104,19 @@ public class AuthServiceImpl implements AuthService {
                 .role(user.getRole().name())
                 .userId(user.getId())
                 .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
+                .firstName(resolveName(user.getFirstName(), user.getUsername(), user.getEmail()))
+                .lastName(user.getLastName() != null ? user.getLastName() : "")
                 .username(user.getUsername())
+                .phoneNumber(user.getPhoneNumber())
                 .build();
+    }
+
+    /** Return firstName if present, else username, else email prefix. */
+    private String resolveName(String firstName, String username, String email) {
+        if (firstName != null && !firstName.isBlank()) return firstName;
+        if (username != null && !username.isBlank()) return username;
+        if (email != null) return email.split("@")[0];
+        return "User";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -550,5 +562,30 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             log.error("Failed to send password changed email to {}: {}", user.getEmail(), e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(String email, String currentPassword, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BadCredentialsException("Current password is incorrect");
+        }
+
+        // Validate new password
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new IllegalArgumentException("New password must be at least 6 characters");
+        }
+
+        if (currentPassword.equals(newPassword)) {
+            throw new IllegalArgumentException("New password must be different from current password");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        log.info("Password changed for user: {}", email);
     }
 }

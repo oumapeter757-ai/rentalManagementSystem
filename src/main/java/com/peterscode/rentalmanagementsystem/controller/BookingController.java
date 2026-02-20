@@ -67,8 +67,14 @@ public class BookingController {
         Map<String, Object> map = new HashMap<>();
         map.put("id", booking.getId());
         map.put("tenantId", booking.getTenant().getId());
-        map.put("tenantName", booking.getTenant().getFirstName() + " " + booking.getTenant().getLastName());
-        map.put("tenantEmail", booking.getTenant().getEmail());
+        String firstName = booking.getTenant().getFirstName();
+        String lastName = booking.getTenant().getLastName();
+        String username = booking.getTenant().getUsername();
+        String email = booking.getTenant().getEmail();
+        String displayName = (firstName != null && !firstName.isBlank()) ? firstName : (username != null ? username : (email != null ? email.split("@")[0] : "User"));
+        if (lastName != null && !lastName.isBlank()) displayName += " " + lastName;
+        map.put("tenantName", displayName);
+        map.put("tenantEmail", email);
         map.put("propertyId", booking.getProperty().getId());
         map.put("propertyTitle", booking.getProperty().getTitle());
         map.put("status", booking.getStatus().name());

@@ -1,49 +1,74 @@
 package com.peterscode.rentalmanagementsystem.service.sms;
 
-import com.peterscode.rentalmanagementsystem.config.TwilioConfig;
+import com.peterscode.rentalmanagementsystem.config.AfricasTalkingConfig;
 import com.peterscode.rentalmanagementsystem.model.sms.ReminderType;
 import com.peterscode.rentalmanagementsystem.model.sms.SmsReminder;
 import com.peterscode.rentalmanagementsystem.model.sms.SmsStatus;
 import com.peterscode.rentalmanagementsystem.model.user.User;
 import com.peterscode.rentalmanagementsystem.repository.SmsReminderRepository;
-import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.type.PhoneNumber;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SmsService {
 
-    private final TwilioConfig twilioConfig;
+    private final AfricasTalkingConfig africasTalkingConfig;
     private final SmsReminderRepository smsReminderRepository;
 
     /**
-     * Send SMS and log the attempt
+     * Send SMS via Africa's Talking
      */
     @Transactional
     public void sendSms(String to, String message) {
-        try {
-            if (twilioConfig.getPhoneNumber() == null || twilioConfig.getPhoneNumber().isEmpty()) {
-                log.warn("Twilio phone number not configured. Skipping SMS to {}", to);
-                return;
-            }
+        String normalizedTo = normalizePhoneNumber(to);
+        log.info("Sending SMS to {} (normalized: {})", to, normalizedTo);
 
-            Message.creator(
-                    new PhoneNumber(to),
-                    new PhoneNumber(twilioConfig.getPhoneNumber()),
-                    message).create();
-
-            log.info("SMS sent to {}", to);
-        } catch (Exception e) {
-            log.error("Failed to send SMS to {}: {}", to, e.getMessage());
-            throw new RuntimeException("Failed to send SMS", e);
+        if (!africasTalkingConfig.isConfigured()) {
+            log.error("Africa's Talking is not configured. Cannot send SMS to {}", normalizedTo);
+            throw new RuntimeException("SMS provider not configured");
         }
+
+        try {
+            String senderId = africasTalkingConfig.getSenderId();
+            String from = (senderId != null && !senderId.isEmpty()) ? senderId : null;
+
+            String result = africasTalkingConfig.sendSms(
+                    message, from, Arrays.asList(normalizedTo));
+            log.info("SMS sent via Africa's Talking to {}: {}", normalizedTo, result);
+        } catch (Exception e) {
+            log.error("Failed to send SMS to {}: {}", normalizedTo, e.getMessage(), e);
+            throw new RuntimeException("Failed to send SMS: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Normalize phone number to E.164 format for Kenya (+254...)
+     */
+    private String normalizePhoneNumber(String phone) {
+        if (phone == null || phone.trim().isEmpty()) {
+            throw new IllegalArgumentException("Phone number is empty");
+        }
+        String cleaned = phone.trim().replaceAll("[\\s\\-()]+", "");
+        if (cleaned.startsWith("+")) {
+            return cleaned;
+        }
+        if (cleaned.startsWith("0")) {
+            return "+254" + cleaned.substring(1);
+        }
+        if (cleaned.length() == 9) {
+            return "+254" + cleaned;
+        }
+        if (cleaned.startsWith("254") && cleaned.length() >= 12) {
+            return "+" + cleaned;
+        }
+        return "+254" + cleaned;
     }
 
     /**

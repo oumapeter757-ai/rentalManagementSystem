@@ -47,16 +47,16 @@ public class UserController {
     }
 
     @GetMapping("/landlords")
-    @PreAuthorize("hasRole('ADMIN')")  // SECURITY: Only admins should see all landlords
-    @Operation(summary = "Get all landlords (Admin only)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Get all landlords")
     public ResponseEntity<ApiResponse<List<User>>> getLandlords() {
         List<User> landlords = userService.getUsersByRole(Role.LANDLORD);
         return ResponseEntity.ok(ApiResponse.success("Landlords retrieved successfully", landlords));
     }
 
     @GetMapping("/tenants")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get all tenants (Admin only)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'LANDLORD')")
+    @Operation(summary = "Get all tenants")
     public ResponseEntity<ApiResponse<List<User>>> getTenants() {
         List<User> tenants = userService.getUsersByRole(Role.TENANT);
         return ResponseEntity.ok(ApiResponse.success("Tenants retrieved successfully", tenants));

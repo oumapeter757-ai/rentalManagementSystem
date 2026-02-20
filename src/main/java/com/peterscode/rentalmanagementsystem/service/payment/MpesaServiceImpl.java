@@ -145,15 +145,15 @@ public class MpesaServiceImpl implements MpesaService {
     }
 
     @Override
-    public void initiateStkPush(MpesaStkRequest stkRequest) {
-        log.info("Initiating STK Push with request: tenantId={}, amount={}", 
+    public MpesaStkResponse initiateStkPush(MpesaStkRequest stkRequest) {
+        log.info("Initiating STK Push with request: tenantId={}, amount={}",
                 stkRequest.getTenantId(), stkRequest.getAmount());
         
         // Delegate to the main initiateStkPush method
         String description = stkRequest.getDescription() != null ? 
                 stkRequest.getDescription() : "Payment - " + stkRequest.getAccountReference();
         
-        initiateStkPush(
+        return initiateStkPush(
                 stkRequest.getPhoneNumber(),
                 stkRequest.getAmount(),
                 stkRequest.getAccountReference(),

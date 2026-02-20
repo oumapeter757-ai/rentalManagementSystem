@@ -53,6 +53,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                        // Allow Landlords to view tenant list (for SMS/announcements)
+                        .requestMatchers(HttpMethod.GET, "/api/users/tenants").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.GET, "/api/users/landlords").hasAnyRole("ADMIN", "LANDLORD")
+
                         .requestMatchers(HttpMethod.GET, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
@@ -68,6 +72,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/admin-exists").permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/api/auth/change-password").authenticated()
 
                         // Property Image endpoints
                         .requestMatchers(HttpMethod.GET, "/api/properties/*/images").permitAll()
@@ -181,6 +186,7 @@ public class SecurityConfig {
 
                         // Booking endpoints
                         .requestMatchers(HttpMethod.GET, "/api/bookings/me").hasRole("TENANT")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/property/*/status").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/bookings").hasAnyRole("ADMIN", "LANDLORD")
 
                         // Tenant-specific endpoints (payment history, leases, payments)
@@ -188,8 +194,22 @@ public class SecurityConfig {
                         .requestMatchers("/api/tenants/leases/**").hasRole("TENANT")
                         .requestMatchers("/api/tenants/payments/**").hasRole("TENANT")
 
+                        // Admin payment history management endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/tenants/admin/payment-histories").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.PUT, "/api/tenants/admin/payment-history/*/deadline").hasAnyRole("ADMIN", "LANDLORD")
+
                         // SMS endpoints — Admin and Landlord
                         .requestMatchers("/api/sms/**").hasAnyRole("ADMIN", "LANDLORD")
+
+                        // Announcement endpoints
+                        .requestMatchers(HttpMethod.GET, "/api/announcements/active").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/announcements").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.POST, "/api/announcements").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.PUT, "/api/announcements/**").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.DELETE, "/api/announcements/**").hasRole("ADMIN")
+
+                        // Profile endpoints — any authenticated user can read/update their own profile
+                        .requestMatchers("/api/profile/me").authenticated()
 
                         .requestMatchers(
                                 "/",

@@ -37,4 +37,6 @@ public interface AuthService {
     void resetPassword(ResetPasswordRequest request);
 
     JwtResponse getUserInfoByEmail(String email);
+
+    void changePassword(String email, String currentPassword, String newPassword);
 }

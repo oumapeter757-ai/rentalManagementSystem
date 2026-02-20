@@ -5,5 +5,11 @@ public enum PropertyType {
     HOUSE,
     STUDIO,
     OFFICE,
-    SHOP
+    SHOP,
+    CONDO,
+    TOWNHOUSE,
+    VILLA,
+    WAREHOUSE,
+    COMMERCIAL,
+    LAND
 }
