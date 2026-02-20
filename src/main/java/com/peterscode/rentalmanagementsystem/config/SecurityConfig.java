@@ -217,6 +217,7 @@ public class SecurityConfig {
                                 "/api/files/health",
                                 "/actuator/health",
                                 "/api/auth/**",
+                                "/api/public/**",
                                 "/api/files/**",
                                 "/uploads/**",
                                 "/static/**",

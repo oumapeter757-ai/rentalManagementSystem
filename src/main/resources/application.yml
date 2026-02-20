@@ -78,6 +78,7 @@ app:
   testing:
     auto-verify-email: false  # overridden to true in application-dev.yml only
 
+
 jwt:
   secret: ${JWT_SECRET}
   expiration-ms: 86400000
