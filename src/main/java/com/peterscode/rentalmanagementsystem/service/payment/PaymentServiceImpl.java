@@ -29,6 +29,7 @@ import com.peterscode.rentalmanagementsystem.model.application.RentalApplication
 import com.peterscode.rentalmanagementsystem.model.application.RentalApplicationStatus;
 
 import com.peterscode.rentalmanagementsystem.service.audit.AuditLogService;
+import com.peterscode.rentalmanagementsystem.service.booking.BookingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -59,6 +60,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final ObjectMapper objectMapper;
     private final MonthlyPaymentHistoryService monthlyPaymentHistoryService;
     private final AuditLogService auditLogService;
+    private final BookingService bookingService;
 
 
 
@@ -687,6 +689,16 @@ public class PaymentServiceImpl implements PaymentService {
                             property.setAvailable(false);
                             propertyRepository.save(property);
                             log.info("Marked property {} as unavailable (booked)", property.getId());
+
+                            // Create a Booking record so it appears in admin/landlord booking tables
+                            try {
+                                bookingService.createBookingFromDeposit(
+                                        payment.getTenant().getId(), property.getId());
+                                log.info("Created booking for tenant {} on property {}",
+                                        payment.getTenant().getId(), property.getId());
+                            } catch (Exception ex) {
+                                log.warn("Booking already exists or could not be created: {}", ex.getMessage());
+                            }
                         }
                     }
                 }
@@ -1102,6 +1114,16 @@ public class PaymentServiceImpl implements PaymentService {
                              property.setAvailable(false);
                              propertyRepository.save(property);
                              log.info("Marked property {} as unavailable (booked)", property.getId());
+
+                             // Create a Booking record so it appears in admin/landlord booking tables
+                             try {
+                                 bookingService.createBookingFromDeposit(
+                                         tenant.getId(), property.getId());
+                                 log.info("Created booking for tenant {} on property {}",
+                                         tenant.getId(), property.getId());
+                             } catch (Exception ex) {
+                                 log.warn("Booking already exists or could not be created: {}", ex.getMessage());
+                             }
                          }
                      }
                  }
