@@ -21,6 +21,11 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +48,15 @@ public class EmailServiceImpl implements EmailService {
 
     @Value("${app.backend-url:http://localhost:8080}")
     private String backendUrl;
+
+    @Value("${BREVO_API_KEY:}")
+    private String brevoApiKey;
+
+    @Value("${BREVO_SENDER_EMAIL:noreply@rentalhub.com}")
+    private String brevoSenderEmail;
+
+    @Value("${BREVO_SENDER_NAME:RentalHub}")
+    private String brevoSenderName;
 
     @Override
     @Transactional
@@ -138,7 +152,8 @@ public class EmailServiceImpl implements EmailService {
         log.info("Resending email with ID: {}", resendRequest.getEmailLogId());
 
         EmailLog emailLog = emailLogRepository.findById(resendRequest.getEmailLogId())
-                .orElseThrow(() -> new ResourceNotFoundException("EmailLog not found with id: " + resendRequest.getEmailLogId()));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "EmailLog not found with id: " + resendRequest.getEmailLogId()));
 
         // Increment retry count
         emailLog.setRetryCount(emailLog.getRetryCount() + 1);
@@ -298,6 +313,10 @@ public class EmailServiceImpl implements EmailService {
     // ========== PRIVATE HELPER METHODS ==========
 
     private boolean isEmailConfigured() {
+        // Brevo HTTP API is always available if API key is set
+        if (brevoApiKey != null && !brevoApiKey.isBlank()) {
+            return true;
+        }
         return javaMailSender != null &&
                 fromEmail != null &&
                 !fromEmail.equals("noreply@rentalmanagementsystem.com") &&
@@ -306,6 +325,13 @@ public class EmailServiceImpl implements EmailService {
     }
 
     private void sendRealEmail(EmailRequest emailRequest) throws Exception {
+        // Use Brevo HTTP API if available (works on Render where SMTP is blocked)
+        if (brevoApiKey != null && !brevoApiKey.isBlank()) {
+            sendViaBrevoApi(emailRequest);
+            return;
+        }
+
+        // Fallback to SMTP
         MimeMessage message = javaMailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
@@ -316,6 +342,55 @@ public class EmailServiceImpl implements EmailService {
         helper.setText(emailRequest.getBody(), true);
 
         javaMailSender.send(message);
+    }
+
+    /**
+     * Send email using Brevo's HTTP API (port 443 — never blocked by hosting
+     * providers).
+     */
+    private void sendViaBrevoApi(EmailRequest emailRequest) throws Exception {
+        // Escape JSON special characters in the HTML body
+        String escapedBody = emailRequest.getBody()
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+
+        String jsonBody = String.format("""
+                {
+                    "sender": {"name": "%s", "email": "%s"},
+                    "to": [{"email": "%s"}],
+                    "subject": "%s",
+                    "htmlContent": "%s"
+                }
+                """,
+                brevoSenderName,
+                brevoSenderEmail,
+                emailRequest.getRecipient(),
+                emailRequest.getSubject().replace("\"", "\\\""),
+                escapedBody);
+
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .build();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://api.brevo.com/v3/smtp/email"))
+                .header("accept", "application/json")
+                .header("content-type", "application/json")
+                .header("api-key", brevoApiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            log.info("✅ Email sent via Brevo API to: {}", emailRequest.getRecipient());
+        } else {
+            log.error("❌ Brevo API error ({}): {}", response.statusCode(), response.body());
+            throw new RuntimeException("Brevo API error: " + response.body());
+        }
     }
 
     private String generateHtmlContent(EmailRequest emailRequest) {
@@ -341,7 +416,8 @@ public class EmailServiceImpl implements EmailService {
             String frontendResetLink = frontendUrl + "/reset-password?token=" + token;
             String directApiLink = backendUrl + "/api/reset-password?token=" + token;
 
-            return generatePasswordResetEmailHtml(firstName, token, frontendResetLink, directApiLink, expiryHours, currentYear);
+            return generatePasswordResetEmailHtml(firstName, token, frontendResetLink, directApiLink, expiryHours,
+                    currentYear);
         }
 
         if (templateName != null && templateName.contains("password-reset-code")) {
@@ -355,199 +431,203 @@ public class EmailServiceImpl implements EmailService {
         return emailRequest.getBody() != null ? emailRequest.getBody() : "";
     }
 
-    private String generateVerificationEmailHtml(String firstName, String verificationLink, int expiryHours, int currentYear) {
+    private String generateVerificationEmailHtml(String firstName, String verificationLink, int expiryHours,
+            int currentYear) {
         return String.format("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body { font-family: Arial, sans-serif; line-height: 1.6; }
-                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    .button {\s
-                        background-color: #4F46E5;\s
-                        color: white;\s
-                        padding: 12px 24px;\s
-                        text-decoration: none;\s
-                        border-radius: 4px;\s
-                        display: inline-block;\s
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h2>Verify Your Email</h2>
-                    <p>Hello %s,</p>
-                    <p>Please verify your email by clicking the button below:</p>
-                    <a href="%s" class="button">Verify Email</a>
-                    <p>This link expires in %d hours.</p>
-                    <p>If you didn't create an account, please ignore this email.</p>
-                    <p>© %d Rental Management System</p>
-                </div>
-            </body>
-            </html>
-           \s""", firstName, verificationLink, expiryHours, currentYear);
+                 <!DOCTYPE html>
+                 <html>
+                 <head>
+                     <meta charset="UTF-8">
+                     <style>
+                         body { font-family: Arial, sans-serif; line-height: 1.6; }
+                         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                         .button {\s
+                             background-color: #4F46E5;\s
+                             color: white;\s
+                             padding: 12px 24px;\s
+                             text-decoration: none;\s
+                             border-radius: 4px;\s
+                             display: inline-block;\s
+                         }
+                     </style>
+                 </head>
+                 <body>
+                     <div class="container">
+                         <h2>Verify Your Email</h2>
+                         <p>Hello %s,</p>
+                         <p>Please verify your email by clicking the button below:</p>
+                         <a href="%s" class="button">Verify Email</a>
+                         <p>This link expires in %d hours.</p>
+                         <p>If you didn't create an account, please ignore this email.</p>
+                         <p>© %d Rental Management System</p>
+                     </div>
+                 </body>
+                 </html>
+                \s""", firstName, verificationLink, expiryHours, currentYear);
     }
 
     private String generatePasswordResetEmailHtml(String firstName, String token,
-                                                  String frontendResetLink, String directApiLink,
-                                                  int expiryHours, int currentYear) {
+            String frontendResetLink, String directApiLink,
+            int expiryHours, int currentYear) {
         return String.format("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Reset Your Password</title>
-                <style>
-                    body {
-                        font-family: 'Segue UI', Tahoma, Geneva, Verdana, sans-serif;
-                        line-height: 1.6;
-                        color: #333;
-                        margin: 0;
-                        padding: 20px;
-                        background-color: #f5f7fa;
-                    }
-                    .container {
-                        max-width: 600px;
-                        margin: 0 auto;
-                        background-color: white;
-                        border-radius: 12px;
-                        padding: 30px;
-                        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-                    }
-                    .button {
-                        display: inline-block;
-                        background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
-                        color: white;
-                        text-decoration: none;
-                        padding: 14px 32px;
-                        border-radius: 8px;
-                        font-weight: 600;
-                        font-size: 16px;
-                        margin: 20px 0;
-                        text-align: center;
-                    }
-                    .token-box {
-                        background-color: #f8f9fa;
-                        border: 2px dashed #dee2e6;
-                        border-radius: 8px;
-                        padding: 15px;
-                        margin: 20px 0;
-                        font-family: 'Courier New', monospace;
-                        font-size: 14px;
-                        word-break: break-all;
-                    }
-                    .footer {
-                        margin-top: 30px;
-                        padding-top: 20px;
-                        border-top: 1px solid #eee;
-                        font-size: 12px;
-                        color: #666;
-                        text-align: center;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h2>Reset Your Password</h2>
-                    <p>Hello <strong>%s</strong>,</p>
-                    <p>We received a request to reset your password for your Rental Management System account.</p>
+                 <!DOCTYPE html>
+                 <html>
+                 <head>
+                     <meta charset="UTF-8">
+                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                     <title>Reset Your Password</title>
+                     <style>
+                         body {
+                             font-family: 'Segue UI', Tahoma, Geneva, Verdana, sans-serif;
+                             line-height: 1.6;
+                             color: #333;
+                             margin: 0;
+                             padding: 20px;
+                             background-color: #f5f7fa;
+                         }
+                         .container {
+                             max-width: 600px;
+                             margin: 0 auto;
+                             background-color: white;
+                             border-radius: 12px;
+                             padding: 30px;
+                             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                         }
+                         .button {
+                             display: inline-block;
+                             background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
+                             color: white;
+                             text-decoration: none;
+                             padding: 14px 32px;
+                             border-radius: 8px;
+                             font-weight: 600;
+                             font-size: 16px;
+                             margin: 20px 0;
+                             text-align: center;
+                         }
+                         .token-box {
+                             background-color: #f8f9fa;
+                             border: 2px dashed #dee2e6;
+                             border-radius: 8px;
+                             padding: 15px;
+                             margin: 20px 0;
+                             font-family: 'Courier New', monospace;
+                             font-size: 14px;
+                             word-break: break-all;
+                         }
+                         .footer {
+                             margin-top: 30px;
+                             padding-top: 20px;
+                             border-top: 1px solid #eee;
+                             font-size: 12px;
+                             color: #666;
+                             text-align: center;
+                         }
+                     </style>
+                 </head>
+                 <body>
+                     <div class="container">
+                         <h2>Reset Your Password</h2>
+                         <p>Hello <strong>%s</strong>,</p>
+                         <p>We received a request to reset your password for your Rental Management System account.</p>
 
-                    <div style="text-align: center; margin: 25px 0;">
-                        <a href="%s" class="button">Click Here to Reset Password</a>
-                        <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                            (Click the button above to reset your password)
-                        </p>
-                    </div>  \s
-                    <div class="token-box">
-                        <strong>Your Reset Token:</strong><br>
-                        <code>%s</code>
-                    </div>
-                   \s
-                    <p><strong>Alternative Method:</strong> If the button doesn't work, you can:</p>
-                    <ol>
-                        <li>Go to: %s/auth/reset-password</li>
-                        <li>Enter this token: <code>%s</code></li>
-                    </ol>
-                   \s
-                    <p><strong>Or use this direct API link:</strong></p>
-                    <div class="token-box">
-                        <code>%s</code>
-                    </div>
-                   \s
-                    <p><strong>Important:</strong></p>
-                    <ul>
-                        <li>This token expires in <strong>%d hours</strong></li>
-                        <li>Never share this token with anyone</li>
-                        <li>If you didn't request this, please ignore this email</li>
-                    </ul>
-                   \s
-                    <div class="footer">
-                        <p>© %d Rental Management System</p>
-                        <p>This is an automated message. Please do not reply.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-           \s""", firstName, frontendResetLink, token, frontendUrl, token, directApiLink, expiryHours, currentYear);
+                         <div style="text-align: center; margin: 25px 0;">
+                             <a href="%s" class="button">Click Here to Reset Password</a>
+                             <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                                 (Click the button above to reset your password)
+                             </p>
+                         </div>  \s
+                         <div class="token-box">
+                             <strong>Your Reset Token:</strong><br>
+                             <code>%s</code>
+                         </div>
+                        \s
+                         <p><strong>Alternative Method:</strong> If the button doesn't work, you can:</p>
+                         <ol>
+                             <li>Go to: %s/auth/reset-password</li>
+                             <li>Enter this token: <code>%s</code></li>
+                         </ol>
+                        \s
+                         <p><strong>Or use this direct API link:</strong></p>
+                         <div class="token-box">
+                             <code>%s</code>
+                         </div>
+                        \s
+                         <p><strong>Important:</strong></p>
+                         <ul>
+                             <li>This token expires in <strong>%d hours</strong></li>
+                             <li>Never share this token with anyone</li>
+                             <li>If you didn't request this, please ignore this email</li>
+                         </ul>
+                        \s
+                         <div class="footer">
+                             <p>© %d Rental Management System</p>
+                             <p>This is an automated message. Please do not reply.</p>
+                         </div>
+                     </div>
+                 </body>
+                 </html>
+                \s""", firstName, frontendResetLink, token, frontendUrl, token, directApiLink, expiryHours,
+                currentYear);
     }
 
     private String generatePasswordResetCodeEmailHtml(String firstName, String resetCode,
-                                                      int expiryMinutes, int currentYear) {
-        return String.format("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-                    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; padding: 30px; }
-                    .code { font-size: 48px; font-weight: bold; letter-spacing: 10px; color: #4F46E5; margin: 20px 0; text-align: center; }
-                    .expiry { color: #666; font-size: 14px; margin: 10px 0; text-align: center; }
-                    .warning { background: #fff3cd; border: 1px solid #ffecb5; padding: 15px; margin: 20px 0; border-radius: 5px; }
-                    .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center; }
-                    .header { text-align: center; margin-bottom: 20px; }
-                    .header h2 { color: #4F46E5; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h2>Password Reset Code</h2>
-                    </div>
-                    <p>Hello <strong>%s</strong>,</p>
-                    <p>You requested to reset your password. Use the verification code below to complete the reset process.</p>
-                   \s
-                    <div class="code">%s</div>
-                    <div class="expiry">⏰ This code expires in: %d minutes</div>
-                   \s
-                    <div class="warning">
-                        <strong>Security Notice:</strong>
-                        <ul>
-                            <li>Do not share this code with anyone</li>
-                            <li>This code expires in %d minutes</li>
-                            <li>Use it immediately on the password reset page</li>
-                            <li>If you didn't request this, please ignore this email</li>
-                        </ul>
-                    </div>
-                   \s
-                    <p><strong>How to use:</strong></p>
-                    <ol>
-                        <li>Go to: %s/auth/reset-password</li>
-                        <li>Enter the 6-digit code: <strong>%s</strong></li>
-                        <li>Create your new password</li>
-                    </ol>
-                   \s
-                    <div class="footer">
-                        <p>© %d Rental Management System</p>
-                        <p>This is an automated message. Please do not reply.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-           \s""", firstName, resetCode, expiryMinutes, expiryMinutes, frontendUrl, resetCode, currentYear);
+            int expiryMinutes, int currentYear) {
+        return String.format(
+                """
+                         <!DOCTYPE html>
+                         <html>
+                         <head>
+                             <meta charset="UTF-8">
+                             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                             <style>
+                                 body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
+                                 .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; padding: 30px; }
+                                 .code { font-size: 48px; font-weight: bold; letter-spacing: 10px; color: #4F46E5; margin: 20px 0; text-align: center; }
+                                 .expiry { color: #666; font-size: 14px; margin: 10px 0; text-align: center; }
+                                 .warning { background: #fff3cd; border: 1px solid #ffecb5; padding: 15px; margin: 20px 0; border-radius: 5px; }
+                                 .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center; }
+                                 .header { text-align: center; margin-bottom: 20px; }
+                                 .header h2 { color: #4F46E5; }
+                             </style>
+                         </head>
+                         <body>
+                             <div class="container">
+                                 <div class="header">
+                                     <h2>Password Reset Code</h2>
+                                 </div>
+                                 <p>Hello <strong>%s</strong>,</p>
+                                 <p>You requested to reset your password. Use the verification code below to complete the reset process.</p>
+                                \s
+                                 <div class="code">%s</div>
+                                 <div class="expiry">⏰ This code expires in: %d minutes</div>
+                                \s
+                                 <div class="warning">
+                                     <strong>Security Notice:</strong>
+                                     <ul>
+                                         <li>Do not share this code with anyone</li>
+                                         <li>This code expires in %d minutes</li>
+                                         <li>Use it immediately on the password reset page</li>
+                                         <li>If you didn't request this, please ignore this email</li>
+                                     </ul>
+                                 </div>
+                                \s
+                                 <p><strong>How to use:</strong></p>
+                                 <ol>
+                                     <li>Go to: %s/auth/reset-password</li>
+                                     <li>Enter the 6-digit code: <strong>%s</strong></li>
+                                     <li>Create your new password</li>
+                                 </ol>
+                                \s
+                                 <div class="footer">
+                                     <p>© %d Rental Management System</p>
+                                     <p>This is an automated message. Please do not reply.</p>
+                                 </div>
+                             </div>
+                         </body>
+                         </html>
+                        \s""",
+                firstName, resetCode, expiryMinutes, expiryMinutes, frontendUrl, resetCode, currentYear);
     }
 
     private void logEmailDetails(EmailRequest emailRequest) {
@@ -620,7 +700,8 @@ public class EmailServiceImpl implements EmailService {
 
     private Map<String, Object> extractVariablesFromBody(String body) {
         Map<String, Object> variables = new HashMap<>();
-        if (body == null || body.isEmpty()) return variables;
+        if (body == null || body.isEmpty())
+            return variables;
 
         // Extract reset code from HTML (for 6-digit codes)
         if (body.contains("class=\"code\"")) {
