@@ -1,0 +1,59 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy with: Dashboard → New → Blueprint Instance → connect your repo
+
+services:
+  # ── Spring Boot Backend ──────────────────────────────────────────────
+  - type: web
+    name: rental-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+
+      # Database (use external MySQL — Railway, Aiven, or PlanetScale)
+      - key: DB_URL
+        sync: false # set manually in Render dashboard
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # Security
+      - key: JWT_SECRET
+        generateValue: true # Render auto-generates a random secret
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false # set to your frontend URL, e.g. https://rental-hub.onrender.com
+      - key: FRONTEND_URL
+        sync: false # same as CORS_ALLOWED_ORIGINS
+
+      # Email
+      - key: EMAIL_USERNAME
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+
+      # M-Pesa
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        sync: false
+
+      # Stripe
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+
+      # Africa's Talking SMS
+      - key: AT_USERNAME
+        value: sandbox
+      - key: AT_API_KEY
+        sync: false
+
+    healthCheckPath: /actuator/health

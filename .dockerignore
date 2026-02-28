@@ -1,0 +1,16 @@
+.git
+.gitignore
+target/
+.env
+.env.*
+!.env.example
+*.iml
+.idea/
+*.log
+uploads/
+*.sql
+*.md
+qodana.yaml
+cp.txt
+quick_fix.sh
+src/test/

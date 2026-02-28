@@ -45,6 +45,12 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31536000)))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
 
@@ -195,8 +201,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/tenants/payments/**").hasRole("TENANT")
 
                         // Admin payment history management endpoints
-                        .requestMatchers(HttpMethod.GET, "/api/tenants/admin/payment-histories").hasAnyRole("ADMIN", "LANDLORD")
-                        .requestMatchers(HttpMethod.PUT, "/api/tenants/admin/payment-history/*/deadline").hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.GET, "/api/tenants/admin/payment-histories")
+                        .hasAnyRole("ADMIN", "LANDLORD")
+                        .requestMatchers(HttpMethod.PUT, "/api/tenants/admin/payment-history/*/deadline")
+                        .hasAnyRole("ADMIN", "LANDLORD")
 
                         // SMS endpoints — Admin and Landlord
                         .requestMatchers("/api/sms/**").hasAnyRole("ADMIN", "LANDLORD")

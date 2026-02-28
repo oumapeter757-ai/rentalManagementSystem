@@ -1,21 +1,34 @@
 spring:
   datasource:
-    url: jdbc:mysql://prod_host:3306/rental_management_prod?useSSL=true&allowPublicKeyRetrieval=false
-    username: peter
-    password: peter
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     show-sql: false
 
   flyway:
     enabled: true
     baseline-on-migrate: true
 
+# Disable Swagger in production
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
 server:
-  port: 8080
+  port: ${PORT:8080}
   forward-headers-strategy: framework
+
+# Restrict actuator in prod
+management:
+  endpoint:
+    health:
+      show-details: never
 
 logging:
   level:
@@ -23,5 +36,5 @@ logging:
     com.peterscode: INFO
 
 jwt:
-  secret: b61eb47178bc3fc9fedd50fecb3f12416e0cc2fe3c37df6a809c2d7f33a060fb5398cab8d664a88c88fca90c8e5d9c6ce41e42e14e9919b980975b8dd4c56a5e
-  expiration: 86400000
+  secret: ${JWT_SECRET}
+  expiration-ms: 86400000
