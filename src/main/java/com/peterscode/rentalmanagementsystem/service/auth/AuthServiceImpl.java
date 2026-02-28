@@ -6,6 +6,7 @@ import com.peterscode.rentalmanagementsystem.dto.request.RegisterRequest;
 import com.peterscode.rentalmanagementsystem.dto.request.ResetPasswordRequest;
 import com.peterscode.rentalmanagementsystem.dto.response.JwtResponse;
 import com.peterscode.rentalmanagementsystem.exception.*;
+import com.peterscode.rentalmanagementsystem.model.logs.EmailStatus;
 import com.peterscode.rentalmanagementsystem.model.logs.PasswordResetToken;
 import com.peterscode.rentalmanagementsystem.model.logs.VerificationToken;
 import com.peterscode.rentalmanagementsystem.model.user.Role;
@@ -38,8 +39,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -53,8 +52,6 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
-
-
 
     @Value("${app.frontend-url:http://localhost:5174}")
     private String frontendUrl;
@@ -71,6 +68,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // ─── Shared helper: create + save + send verification token ──────────────
+    // Throws RuntimeException if email sending fails so caller can rollback
     private void createAndSendVerificationToken(User user) {
         String token = UUID.randomUUID().toString();
         VerificationToken verificationToken = VerificationToken.builder()
@@ -79,7 +77,7 @@ public class AuthServiceImpl implements AuthService {
                 .expiryDate(LocalDateTime.now().plusHours(VERIFICATION_TOKEN_EXPIRY_HOURS))
                 .build();
         verificationTokenRepository.save(verificationToken);
-        sendVerificationEmail(user, token);
+        sendVerificationEmailSync(user, token); // synchronous — throws on failure
     }
 
     // ─── Shared helper: build JwtResponse ────────────────────────────────────
@@ -113,9 +111,12 @@ public class AuthServiceImpl implements AuthService {
 
     /** Return firstName if present, else username, else email prefix. */
     private String resolveName(String firstName, String username, String email) {
-        if (firstName != null && !firstName.isBlank()) return firstName;
-        if (username != null && !username.isBlank()) return username;
-        if (email != null) return email.split("@")[0];
+        if (firstName != null && !firstName.isBlank())
+            return firstName;
+        if (username != null && !username.isBlank())
+            return username;
+        if (email != null)
+            return email.split("@")[0];
         return "User";
     }
 
@@ -131,29 +132,30 @@ public class AuthServiceImpl implements AuthService {
             throw new UserAlreadyExistsException("User with email " + request.getEmail() + " already exists");
         }
 
+        User user = User.builder()
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .phoneNumber(request.getPhoneNumber())
+                .role(Role.TENANT)
+                .enabled(false)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .build();
+
+        User savedUser = userRepository.save(user);
         try {
-            User user = User.builder()
-                    .firstName(request.getFirstName())
-                    .lastName(request.getLastName())
-                    .email(request.getEmail())
-                    .password(passwordEncoder.encode(request.getPassword()))
-                    .phoneNumber(request.getPhoneNumber())
-                    .role(Role.TENANT)
-                    .enabled(false)
-                    .createdAt(Instant.now())
-                    .updatedAt(Instant.now())
-                    .build();
-
-            User savedUser = userRepository.save(user);
             createAndSendVerificationToken(savedUser);
-
-            log.info("User registered successfully: {}", savedUser.getEmail());
-            return true;
-
         } catch (Exception e) {
-            log.error("Error during user registration: {}", e.getMessage());
-            throw new RuntimeException("Registration failed: " + e.getMessage(), e);
+            log.error("Email sending failed, rolling back registration for: {}", savedUser.getEmail());
+            verificationTokenRepository.deleteByUser(savedUser);
+            userRepository.delete(savedUser);
+            throw new RuntimeException("Registration failed: could not send verification email. Please try again.", e);
         }
+
+        log.info("User registered successfully: {}", savedUser.getEmail());
+        return true;
     }
 
     @Override
@@ -178,11 +180,16 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         User savedAdmin = userRepository.save(admin);
-        createAndSendVerificationToken(savedAdmin);
+        try {
+            createAndSendVerificationToken(savedAdmin);
+        } catch (Exception e) {
+            log.error("Email sending failed, rolling back admin registration for: {}", savedAdmin.getEmail());
+            verificationTokenRepository.deleteByUser(savedAdmin);
+            userRepository.delete(savedAdmin);
+            throw new RuntimeException("Registration failed: could not send verification email. Please try again.", e);
+        }
 
         log.info("Admin registered. Verification email sent to: {}", savedAdmin.getEmail());
-
-        // No JWT yet — admin must verify email first
         return buildPendingVerificationResponse(savedAdmin);
     }
 
@@ -235,11 +242,16 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         User savedTenant = userRepository.save(tenant);
-        createAndSendVerificationToken(savedTenant);
+        try {
+            createAndSendVerificationToken(savedTenant);
+        } catch (Exception e) {
+            log.error("Email sending failed, rolling back tenant registration for: {}", savedTenant.getEmail());
+            verificationTokenRepository.deleteByUser(savedTenant);
+            userRepository.delete(savedTenant);
+            throw new RuntimeException("Registration failed: could not send verification email. Please try again.", e);
+        }
 
         log.info("Tenant registered. Verification email sent to: {}", savedTenant.getEmail());
-
-        // No JWT yet — tenant must verify email first
         return buildPendingVerificationResponse(savedTenant);
     }
 
@@ -417,29 +429,32 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    private void sendVerificationEmail(User user, String token) {
-        try {
-            String verificationLink = frontendUrl + "/verify-email?token=" + token;
+    /**
+     * Send verification email SYNCHRONOUSLY.
+     * Throws RuntimeException if sending fails so the caller can rollback the
+     * registration.
+     */
+    private void sendVerificationEmailSync(User user, String token) {
+        String verificationLink = frontendUrl + "/verify-email?token=" + token;
 
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("firstName", user.getFirstName());
-            variables.put("verificationLink", verificationLink);
-            variables.put("expiryHours", VERIFICATION_TOKEN_EXPIRY_HOURS);
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("firstName", user.getFirstName());
+        variables.put("verificationLink", verificationLink);
+        variables.put("expiryHours", VERIFICATION_TOKEN_EXPIRY_HOURS);
 
-            EmailRequest emailRequest = EmailRequest.builder()
-                    .recipient(user.getEmail())
-                    .subject("Verify Your Email - Rental Management System")
-                    .templateName("email-verification")
-                    .variables(variables)
-                    .html(true)
-                    .build();
+        EmailRequest emailRequest = EmailRequest.builder()
+                .recipient(user.getEmail())
+                .subject("Verify Your Email - Rental Management System")
+                .templateName("email-verification")
+                .variables(variables)
+                .html(true)
+                .build();
 
-            emailService.sendEmailAsync(emailRequest);
-            log.info("Verification email sent to: {}", user.getEmail());
-
-        } catch (Exception e) {
-            log.error("Failed to send verification email to {}: {}", user.getEmail(), e.getMessage());
+        var result = emailService.sendEmail(emailRequest); // synchronous call
+        if (result == null || result.getStatus() != EmailStatus.SENT) {
+            throw new RuntimeException("Verification email could not be sent to " + user.getEmail());
         }
+        log.info("Verification email sent successfully to: {}", user.getEmail());
     }
 
     private void sendRegistrationEmail(User user, String userType) {
