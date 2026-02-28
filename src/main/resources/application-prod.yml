@@ -16,8 +16,8 @@ spring:
     out-of-order: false
 
   mail:
-    host: smtp.gmail.com
-    port: 587
+    host: ${EMAIL_HOST:smtp-relay.brevo.com}
+    port: ${EMAIL_PORT:587}
     username: ${EMAIL_USERNAME}
     password: ${EMAIL_PASSWORD}
     properties:
