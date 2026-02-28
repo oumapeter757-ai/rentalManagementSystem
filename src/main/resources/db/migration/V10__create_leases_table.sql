@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS leases (
     end_date DATE NOT NULL,
     monthly_rent DECIMAL(19, 2) NOT NULL,
     deposit DECIMAL(19, 2) NULL,
-    deposit_paid BOOLEAN DEFAULT FALSE,
     status VARCHAR(20) NOT NULL,
     notes TEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
