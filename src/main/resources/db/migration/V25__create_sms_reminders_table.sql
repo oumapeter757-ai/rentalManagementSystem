@@ -14,21 +14,39 @@ CREATE TABLE IF NOT EXISTS sms_reminders (
     INDEX idx_status (status),
     INDEX idx_reminder_type (reminder_type),
     INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 -- Add phone_number to users if not exists for SMS notifications
 -- Note: Check if column exists first to avoid errors on re-run
-SET @column_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'users'
-    AND COLUMN_NAME = 'phone_number');
-
-SET @sql = IF(@column_exists = 0,
-    'ALTER TABLE users ADD COLUMN phone_number VARCHAR(15) AFTER email',
-    'SELECT "Column phone_number already exists" AS message');
-PREPARE stmt FROM @sql;
+SET @column_exists = (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'users'
+            AND COLUMN_NAME = 'phone_number'
+    );
+SET @sql = IF(
+        @column_exists = 0,
+        'ALTER TABLE users ADD COLUMN phone_number VARCHAR(15) AFTER email',
+        'SELECT "Column phone_number already exists" AS message'
+    );
+PREPARE stmt
+FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
-
--- Add index for phone_number (will fail silently if exists)
-ALTER TABLE users ADD INDEX idx_phone_number (phone_number);
+-- Add index for phone_number if not exists
+SET @idx_exists = (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'users'
+            AND INDEX_NAME = 'idx_phone_number'
+    );
+SET @idx_sql = IF(
+        @idx_exists = 0,
+        'ALTER TABLE users ADD INDEX idx_phone_number (phone_number)',
+        'SELECT 1'
+    );
+PREPARE stmt2
+FROM @idx_sql;
+EXECUTE stmt2;
+DEALLOCATE PREPARE stmt2;
