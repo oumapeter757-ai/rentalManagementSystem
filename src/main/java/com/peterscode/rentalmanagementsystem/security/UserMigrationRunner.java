@@ -83,12 +83,11 @@ public class UserMigrationRunner implements CommandLineRunner {
             changed = true;
         }
 
-        // Ensure enabled is true (optional - you may want to keep as is)
-        if (!user.isEnabled()) {
-            log.debug("Enabling user: {}", user.getEmail());
-            user.setEnabled(true);
-            changed = true;
-        }
+        // Do NOT auto-enable users — they must verify their email first
+        // if (!user.isEnabled()) {
+        // user.setEnabled(true);
+        // changed = true;
+        // }
 
         return changed;
     }
