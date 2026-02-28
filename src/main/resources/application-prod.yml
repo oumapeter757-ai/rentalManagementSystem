@@ -12,6 +12,8 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    repair-on-migrate: true
+    out-of-order: false
 
 # Disable Swagger in production
 springdoc:
